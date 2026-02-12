@@ -149,8 +149,7 @@ class SpeechPipeline:
                 from openwakeword.model import Model as WakeWordModel
                 log.info("Loading wake word model: %s", config.WAKEWORD_MODEL_PATH)
                 self._wakeword_model = WakeWordModel(
-                    wakeword_models=[config.WAKEWORD_MODEL_PATH],
-                    inference_framework="onnx",
+                    wakeword_model_paths=[config.WAKEWORD_MODEL_PATH],
                 )
                 log.info("Wake word model ready (threshold=%.2f)", config.WAKEWORD_THRESHOLD)
             except Exception:
