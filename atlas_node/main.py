@@ -12,7 +12,7 @@ import sys
 from .config import (
     NODE_ID, ATLAS_WS_URL, DASHBOARD_ENABLED,
     IDENTITY_SYNC_ENABLED, STREAMING_TTS_ENABLED,
-    LOCAL_LLM_ENABLED, LLM_ROUTE,
+    LOCAL_LLM_ENABLED, LLM_ROUTE, TTS_QUEUE_MAXSIZE,
 )
 from .dashboard import DashboardServer
 from .event_store import EventStore
@@ -95,7 +95,7 @@ async def main():
         log.info("Identity sync enabled")
 
     # Wire Brain responses -> TTS (voice-to-voice return path)
-    tts_queue = asyncio.Queue()
+    tts_queue = asyncio.Queue(maxsize=TTS_QUEUE_MAXSIZE)
     tts_engine = getattr(speech, "_tts", None) if speech else None
     sentence_buf = SentenceBuffer()
 
@@ -155,7 +155,7 @@ async def main():
         generates and plays independently -- first sentence plays while
         the LLM is still producing later sentences.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while True:
             text = await tts_queue.get()
             try:
@@ -189,7 +189,7 @@ async def main():
         tasks.append(asyncio.create_task(speech.run(send_all)))
 
     # Graceful shutdown
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     stop = asyncio.Event()
 
     def _shutdown():

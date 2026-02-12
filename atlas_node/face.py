@@ -165,7 +165,9 @@ class FaceDatabase:
 
         self._names = names
         if embeddings:
-            self._embeddings = np.stack(embeddings)  # [N, 512]
+            raw = np.stack(embeddings)  # [N, 512]
+            norms = np.linalg.norm(raw, axis=1, keepdims=True) + 1e-8
+            self._embeddings = raw / norms  # pre-normalized
         else:
             self._embeddings = None
         log.info("Face database: %d identities loaded from %s", len(names), self._db_dir)
@@ -178,10 +180,9 @@ class FaceDatabase:
         if self._embeddings is None or len(self._names) == 0:
             return "unknown", 0.0
 
-        # Cosine similarity
+        # Cosine similarity (DB pre-normalized at load time)
         emb_norm = embedding / (np.linalg.norm(embedding) + 1e-8)
-        db_norm = self._embeddings / (np.linalg.norm(self._embeddings, axis=1, keepdims=True) + 1e-8)
-        sims = db_norm @ emb_norm  # [N]
+        sims = self._embeddings @ emb_norm  # [N]
         best_idx = int(np.argmax(sims))
         best_sim = float(sims[best_idx])
         log.debug("Face match: best=%s sim=%.3f threshold=%.2f", self._names[best_idx], best_sim, config.FACE_MATCH_THRESHOLD)

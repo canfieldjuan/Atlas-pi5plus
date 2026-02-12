@@ -20,6 +20,7 @@ WS_RECONNECT_BASE = float(os.getenv("WS_RECONNECT_BASE", "1.0"))
 WS_RECONNECT_MAX = float(os.getenv("WS_RECONNECT_MAX", "60.0"))
 WS_PING_INTERVAL = float(os.getenv("WS_PING_INTERVAL", "60"))
 WS_PING_TIMEOUT = float(os.getenv("WS_PING_TIMEOUT", "120"))
+WS_SEND_QUEUE_SIZE = int(os.getenv("WS_SEND_QUEUE_SIZE", "256"))
 
 # --- Vision (YOLO World) ---
 YOLO_WORLD_MODEL_PATH = os.getenv(
@@ -51,6 +52,8 @@ AUDIO_INPUT_DEVICE_NAME = os.getenv("AUDIO_INPUT_DEVICE_NAME", "USB 2.0 Camera")
 AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", "16000"))
 AUDIO_CHANNELS = int(os.getenv("AUDIO_CHANNELS", "1"))
 AUDIO_CHUNK_SECONDS = float(os.getenv("AUDIO_CHUNK_SECONDS", "5.0"))
+SPEECH_MIN_SEGMENT_DURATION = float(os.getenv("SPEECH_MIN_SEGMENT_DURATION", "0.3"))
+SPEECH_SILENCE_RMS_THRESHOLD = float(os.getenv("SPEECH_SILENCE_RMS_THRESHOLD", "0.01"))
 
 # --- Face Detection / Recognition ---
 FACE_ENABLED = os.getenv("FACE_ENABLED", "true").lower() in ("true", "1", "yes")
@@ -135,6 +138,8 @@ WAKEWORD_PREBUFFER_FRAMES = int(os.getenv("WAKEWORD_PREBUFFER_FRAMES", "10"))
 # --- TTS ---
 TTS_ENGINE = os.getenv("TTS_ENGINE", "piper")  # "piper" or "kokoro"
 STREAMING_TTS_ENABLED = os.getenv("STREAMING_TTS_ENABLED", "true").lower() in ("true", "1", "yes")
+TTS_QUEUE_MAXSIZE = int(os.getenv("TTS_QUEUE_MAXSIZE", "16"))
+TTS_APLAY_TIMEOUT = int(os.getenv("TTS_APLAY_TIMEOUT", "60"))
 
 # --- Local Skills ---
 SKILLS_TIMEZONE = os.getenv("SKILLS_TIMEZONE", "America/Chicago")

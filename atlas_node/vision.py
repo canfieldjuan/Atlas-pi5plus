@@ -524,7 +524,7 @@ class VisionPipeline:
     async def run(self, on_detections: Callable):
         """Capture frames and run inference at configured FPS."""
         interval = 1.0 / config.VISION_FPS
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         consecutive_failures = 0
 
         while True:

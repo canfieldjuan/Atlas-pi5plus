@@ -29,7 +29,7 @@ _WORD_TO_NUM = {
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
     "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
     "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40,
-    "forty five": 45, "forty-five": 45, "forty five": 45,
+    "forty five": 45, "forty-five": 45,
     "fifty": 50, "sixty": 60, "ninety": 90,
 }
 
@@ -134,7 +134,7 @@ class TimerSkill:
             if self._on_timer_done:
                 cb = self._on_timer_done
                 msg = f"Your {label} timer is done!"
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, cb, msg)
         except asyncio.CancelledError:
             logger.info("Timer '%s' cancelled", name)

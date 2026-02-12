@@ -411,7 +411,9 @@ class GaitDatabase:
 
         self._names = names
         if features:
-            self._features = np.stack(features)
+            raw = np.stack(features)
+            norms = np.linalg.norm(raw, axis=1, keepdims=True) + 1e-8
+            self._features = raw / norms  # pre-normalized
         else:
             self._features = None
         log.info("Gait database: %d identities loaded from %s", len(names), self._db_dir)
@@ -424,11 +426,9 @@ class GaitDatabase:
         if self._features is None or len(self._names) == 0:
             return "unknown", 0.0
 
+        # DB pre-normalized at load time
         feat_norm = feature / (np.linalg.norm(feature) + 1e-8)
-        db_norm = self._features / (
-            np.linalg.norm(self._features, axis=1, keepdims=True) + 1e-8
-        )
-        sims = db_norm @ feat_norm
+        sims = self._features @ feat_norm
         best_idx = int(np.argmax(sims))
         best_sim = float(sims[best_idx])
 

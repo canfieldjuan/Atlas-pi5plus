@@ -21,7 +21,7 @@ class AtlasWSClient:
 
     def __init__(self):
         self._ws = None
-        self._queue: asyncio.Queue = asyncio.Queue(maxsize=256)
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=config.WS_SEND_QUEUE_SIZE)
         self._backoff = config.WS_RECONNECT_BASE
         self._handlers: dict[str, MessageHandler] = {}
         self._on_connect_callbacks: list[Callable[[], Awaitable[None]]] = []

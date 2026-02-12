@@ -25,10 +25,8 @@ AUDIO_OUTPUT_DEVICE = os.getenv("AUDIO_OUTPUT_DEVICE", "")
 
 def _detect_output_device() -> str:
     """Auto-detect best ALSA output device. Prefer USB, then ES8388, then default."""
-    import subprocess as _sp
-
     try:
-        out = _sp.check_output(["aplay", "-l"], stderr=_sp.DEVNULL, text=True)
+        out = subprocess.check_output(["aplay", "-l"], stderr=subprocess.DEVNULL, text=True)
     except Exception:
         return "default"
 
@@ -148,7 +146,7 @@ class TTSEngine:
             self.is_speaking.set()
             subprocess.run(
                 ["aplay", "-q", "-D", self._output_device, tmp_path],
-                timeout=60,
+                timeout=config.TTS_APLAY_TIMEOUT,
                 check=False,
             )
         except subprocess.TimeoutExpired:
@@ -187,7 +185,7 @@ class TTSEngine:
             self.is_speaking.set()
             subprocess.run(
                 ["aplay", "-q", "-D", self._output_device, tmp_path],
-                timeout=60,
+                timeout=config.TTS_APLAY_TIMEOUT,
                 check=False,
             )
         except subprocess.TimeoutExpired:

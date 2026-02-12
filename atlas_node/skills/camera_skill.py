@@ -53,7 +53,7 @@ class CameraSkill:
     description = "Show, hide, or move camera feed on monitors"
     patterns = [
         # 0: show camera [on monitor N]
-        # Two branches: full verb OR garbled-verb+me (wake word clips "show" → "S")
+        # Two branches: full verb OR garbled-verb+me (wake word clips "show" -> "S")
         re.compile(
             r"(?:(?:show|open|display|pull up)\s+(?:me\s+)?|(?:\w{1,3}\s+)?me\s+)"
             r"(?:the\s+)?(?:camera|cam|webcam|feed|stream)"

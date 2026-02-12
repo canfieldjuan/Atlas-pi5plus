@@ -83,12 +83,12 @@ class DashboardServer:
             try:
                 active_tracks = len(self._vision._track_mgr.get_confirmed_tracks())
             except Exception:
-                pass
+                log.debug("Failed to read active tracks", exc_info=True)
             try:
                 if self._vision._motion_det:
                     motion_active = self._vision._motion_det.in_cooldown()
             except Exception:
-                pass
+                log.debug("Failed to read motion state", exc_info=True)
 
         face_count = 0
         face_dir = Path(config.FACE_DB_DIR)

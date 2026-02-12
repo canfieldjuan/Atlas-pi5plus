@@ -210,9 +210,6 @@ class TrackManager:
         if not t.is_known:
             t.person_name = name
             t.is_known = True
-        elif t.person_name == name:
-            # Same person -- boost combined score
-            pass
         t.combined_similarity = self._compute_combined(t)
 
     def _compute_combined(self, t: TrackedPerson) -> float:

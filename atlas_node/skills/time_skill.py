@@ -5,7 +5,7 @@ Time skill - handles time, date, and day queries locally.
 import re
 from datetime import datetime
 
-from .base import Skill, SkillResult
+from .base import SkillResult
 
 
 class TimeSkill:

@@ -193,7 +193,7 @@ class SpeechPipeline:
         if result is not None and result.success:
             log.info("Skill '%s' handled: %s -> %s", result.skill_name, text[:40], result.response_text[:60])
             if self._tts is not None:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._tts.speak, result.response_text)
             return True
         return False
@@ -287,7 +287,7 @@ class SpeechPipeline:
 
     async def run(self, on_transcript: Callable):
         """Record audio, detect speech via VAD, transcribe segments."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         read_size = 1280  # 80ms at 16kHz -- openwakeword native frame size
 
         if self._vad:
@@ -365,7 +365,7 @@ class SpeechPipeline:
                     audio = np.array(segment.samples, dtype=np.float32)
                     duration = len(audio) / config.AUDIO_SAMPLE_RATE
 
-                    if duration < 0.3:
+                    if duration < config.SPEECH_MIN_SEGMENT_DURATION:
                         self._vad.pop()
                         continue
 
@@ -451,7 +451,7 @@ class SpeechPipeline:
                 audio = audio_int16.astype(np.float32) / 32768.0
 
                 rms = np.sqrt(np.mean(audio ** 2))
-                if rms < 0.01:
+                if rms < config.SPEECH_SILENCE_RMS_THRESHOLD:
                     continue
 
                 t0 = time.monotonic()
