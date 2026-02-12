@@ -42,7 +42,7 @@ class SkillRouter:
         normalized = query.strip().lower()
         for skill in self._registry.all_skills():
             for pattern in skill.patterns:
-                m = pattern.match(normalized)
+                m = pattern.search(normalized)
                 if m:
                     return skill, m
         return None

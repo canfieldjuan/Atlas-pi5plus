@@ -32,7 +32,7 @@ def _safe_eval(expr: str) -> float:
     if not tokens:
         raise ValueError("No valid expression found")
 
-    # Reconstruct and validate — only digits, operators, parens, dots, spaces
+    # Reconstruct and validate -- only digits, operators, parens, dots, spaces
     cleaned = "".join(tokens)
     pos = 0
 
@@ -96,9 +96,9 @@ class MathSkill:
     name = "math"
     description = "Calculates basic arithmetic expressions"
     patterns = [
-        re.compile(r"(?:calculate|compute|solve)\s+(.+)"),
-        re.compile(r"(?:what(?:'s| is)?\s+)?(\d+)\s*(?:percent|%)\s*(?:of)\s*(\d+\.?\d*)"),
-        re.compile(r"(?:what(?:'s| is)?\s+)?(\d[\d\s\+\-\*\/\.\(\)]*\d)"),
+        re.compile(r"\b(?:calculate|compute|solve)\s+(.+)"),
+        re.compile(r"\b(?:what(?:'s| is)?\s+)?(\d+)\s*(?:percent|%)\s*(?:of)\s*(\d+\.?\d*)"),
+        re.compile(r"\b(?:what(?:'s| is)?\s+)?(\d[\d\s]*[+\-*/][\d\s+\-*/\.()]*\d)"),
     ]
 
     async def execute(self, query: str, match: re.Match) -> SkillResult:

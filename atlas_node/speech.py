@@ -7,6 +7,7 @@ without brain round-trip.
 import asyncio
 import logging
 import time
+from collections import deque
 from pathlib import Path
 from typing import Callable
 
@@ -31,6 +32,8 @@ class SpeechPipeline:
         self._tts = None
         self._speaker_id = None
         self._wakeword_model = None
+        self._ws_client = None
+        self._local_llm = None
         self._event_store = event_store
 
     def _find_device_by_name(self, name: str):
@@ -158,10 +161,15 @@ class SpeechPipeline:
 
     def set_ws_client(self, ws_client):
         """Set the WS client reference for status skill brain connectivity check."""
+        self._ws_client = ws_client
         if self._skill_router is not None:
             status_skill = self._skill_router._registry.get("status")
             if status_skill is not None:
                 status_skill._ws_client = ws_client
+
+    def set_local_llm(self, local_llm):
+        """Set the local LLM client for Brain-offline fallback."""
+        self._local_llm = local_llm
 
     def _transcribe(self, audio: np.ndarray) -> str:
         """Transcribe float32 audio via sherpa-onnx."""
@@ -189,6 +197,93 @@ class SpeechPipeline:
                 await loop.run_in_executor(None, self._tts.speak, result.response_text)
             return True
         return False
+
+    async def _route_query(
+        self, text, on_transcript, duration, elapsed,
+        speaker_name=None, speaker_conf=0.0,
+    ):
+        """Route query to Brain or local LLM based on config.LLM_ROUTE.
+
+        Shared by both VAD and fixed-chunk paths to avoid duplicated logic.
+
+        Routes:
+          "brain" -- Brain primary, local LLM fallback when Brain is offline
+          "local" -- Local LLM primary (Brain still receives vision/security)
+        """
+        route = config.LLM_ROUTE
+        brain_online = self._ws_client and self._ws_client.is_connected
+        has_local = self._local_llm is not None
+
+        use_local = (
+            route == "local"
+            or (route == "brain" and not brain_online)
+        )
+
+        if use_local and has_local:
+            log.info("Routing to local LLM (route=%s, brain=%s): %s",
+                     route, "on" if brain_online else "off", text[:60])
+            await self._query_local_llm(text, speaker_name)
+        elif not use_local and brain_online:
+            log.debug("Routing to Brain: %s", text[:60])
+            await self._send_to_brain(
+                text, on_transcript, duration, elapsed,
+                speaker_name, speaker_conf,
+            )
+        elif brain_online:
+            # route=local but no local LLM -- fall back to Brain
+            log.debug("Local LLM unavailable, falling back to Brain: %s", text[:60])
+            await self._send_to_brain(
+                text, on_transcript, duration, elapsed,
+                speaker_name, speaker_conf,
+            )
+        else:
+            log.warning("No LLM available (brain=off, local=%s): %s",
+                        "none" if not has_local else "down", text[:60])
+            await self._speak_error("I am currently offline and cannot answer that.")
+
+    async def _send_to_brain(
+        self, text, on_transcript, duration, elapsed,
+        speaker_name, speaker_conf,
+    ):
+        if config.STREAMING_TTS_ENABLED:
+            msg = {
+                "type": "query_stream",
+                "query": text,
+                "session_id": "edge-" + config.NODE_ID,
+                "speaker_id": speaker_name or config.NODE_ID,
+                "context": {
+                    "source": "edge_stt",
+                    "duration": round(duration, 2),
+                    "processing_time": round(elapsed, 3),
+                },
+            }
+        else:
+            msg = {
+                "type": "transcript",
+                "text": text,
+                "duration": round(duration, 2),
+                "processing_time": round(elapsed, 3),
+            }
+            if speaker_name:
+                msg["speaker"] = speaker_name
+                msg["speaker_confidence"] = round(speaker_conf, 3)
+        await on_transcript(msg)
+
+    async def _query_local_llm(self, text, speaker_name):
+        response = await self._local_llm.query(text, speaker=speaker_name)
+        if response and self._tts:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._tts.speak, response)
+        elif response:
+            log.info("Local LLM (no TTS): %s", response[:80])
+        else:
+            log.warning("Local LLM returned no response for: %s", text[:60])
+            await self._speak_error("Sorry, I could not process that right now.")
+
+    async def _speak_error(self, message):
+        if self._tts:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._tts.speak, message)
 
     async def run(self, on_transcript: Callable):
         """Record audio, detect speech via VAD, transcribe segments."""
@@ -225,6 +320,7 @@ class SpeechPipeline:
         wakeword_active = self._wakeword_model is not None
         listening_for_wake = wakeword_active
         listen_deadline = 0.0
+        pre_buffer = deque(maxlen=config.WAKEWORD_PREBUFFER_FRAMES) if wakeword_active else None
 
         while True:
             try:
@@ -237,12 +333,20 @@ class SpeechPipeline:
                 if self._tts and self._tts.is_speaking.is_set():
                     continue
 
+                # Convert int16 to float32 (needed for both pre-buffer and VAD)
+                samples = audio_int16.astype(np.float32) / 32768.0
+
                 # --- Wake word gating ---
                 if listening_for_wake:
+                    pre_buffer.append(samples)
                     if self._check_wakeword(audio_int16):
                         listening_for_wake = False
                         listen_deadline = time.monotonic() + config.WAKEWORD_LISTEN_SECONDS
                         self._wakeword_model.reset()
+                        # Replay buffered audio to VAD so command onset isn't lost
+                        for buffered in pre_buffer:
+                            self._vad.accept_waveform(buffered)
+                        pre_buffer.clear()
                     continue
 
                 # Check listen timeout (return to wake word mode on prolonged silence)
@@ -251,10 +355,9 @@ class SpeechPipeline:
                     listening_for_wake = True
                     self._wakeword_model.reset()
                     self._vad.reset()
+                    pre_buffer.clear()
                     continue
 
-                # --- Convert int16 to float32 for VAD/STT ---
-                samples = audio_int16.astype(np.float32) / 32768.0
                 self._vad.accept_waveform(samples)
 
                 while not self._vad.empty():
@@ -280,6 +383,7 @@ class SpeechPipeline:
                         listening_for_wake = True
                         self._wakeword_model.reset()
                         self._vad.reset()
+                        pre_buffer.clear()
 
             except Exception:
                 log.exception("Speech pipeline error")
@@ -318,36 +422,21 @@ class SpeechPipeline:
         if not text:
             return
 
-        log.debug("STT (%.2fs, %.1fs audio): %s", elapsed, duration, text)
+        log.info("STT (%.2fs, %.1fs audio): %s", elapsed, duration, text)
 
         # Try local skills first
         if await self._try_skill(text):
             return
 
-        # No skill match -- send to brain
-        if config.STREAMING_TTS_ENABLED:
-            msg = {
-                "type": "query_stream",
-                "query": text,
-                "session_id": "edge-" + config.NODE_ID,
-                "speaker_id": speaker_name or config.NODE_ID,
-                "context": {
-                    "source": "edge_stt",
-                    "duration": round(duration, 2),
-                    "processing_time": round(elapsed, 3),
-                },
-            }
-        else:
-            msg = {
-                "type": "transcript",
-                "text": text,
-                "duration": round(duration, 2),
-                "processing_time": round(elapsed, 3),
-            }
-            if speaker_name:
-                msg["speaker"] = speaker_name
-                msg["speaker_confidence"] = round(speaker_conf, 3)
-        await on_transcript(msg)
+        # No skill match -- route to Brain or local LLM fallback
+        await self._route_query(
+            text=text,
+            on_transcript=on_transcript,
+            duration=duration,
+            elapsed=elapsed,
+            speaker_name=speaker_name,
+            speaker_conf=speaker_conf,
+        )
 
     async def _run_fixed_chunks(self, on_transcript, loop):
         """Fallback: fixed-length chunks (no VAD)."""
@@ -370,32 +459,19 @@ class SpeechPipeline:
                 elapsed = time.monotonic() - t0
 
                 if text:
-                    log.debug("STT (%.2fs): %s", elapsed, text)
+                    log.info("STT (%.2fs): %s", elapsed, text)
 
                     # Try local skills first
                     if await self._try_skill(text):
                         continue
 
-                    # No skill match -- send to brain
-                    if config.STREAMING_TTS_ENABLED:
-                        await on_transcript({
-                            "type": "query_stream",
-                            "query": text,
-                            "session_id": "edge-" + config.NODE_ID,
-                            "speaker_id": config.NODE_ID,
-                            "context": {
-                                "source": "edge_stt",
-                                "duration": config.AUDIO_CHUNK_SECONDS,
-                                "processing_time": round(elapsed, 3),
-                            },
-                        })
-                    else:
-                        await on_transcript({
-                            "type": "transcript",
-                            "text": text,
-                            "duration": config.AUDIO_CHUNK_SECONDS,
-                            "processing_time": round(elapsed, 3),
-                        })
+                    # No skill match -- route to Brain or local LLM
+                    await self._route_query(
+                        text=text,
+                        on_transcript=on_transcript,
+                        duration=config.AUDIO_CHUNK_SECONDS,
+                        elapsed=elapsed,
+                    )
 
             except Exception:
                 log.exception("Speech pipeline error")

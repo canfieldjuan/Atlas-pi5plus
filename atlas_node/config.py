@@ -130,6 +130,7 @@ WAKEWORD_MODEL_PATH = os.getenv(
 )
 WAKEWORD_THRESHOLD = float(os.getenv("WAKEWORD_THRESHOLD", "0.5"))
 WAKEWORD_LISTEN_SECONDS = float(os.getenv("WAKEWORD_LISTEN_SECONDS", "10.0"))
+WAKEWORD_PREBUFFER_FRAMES = int(os.getenv("WAKEWORD_PREBUFFER_FRAMES", "10"))
 
 # --- TTS ---
 TTS_ENGINE = os.getenv("TTS_ENGINE", "piper")  # "piper" or "kokoro"
@@ -143,3 +144,15 @@ SKILLS_MAX_TIMERS = int(os.getenv("SKILLS_MAX_TIMERS", "10"))
 CAMERA_DEFAULT_MONITOR = int(os.getenv("CAMERA_DEFAULT_MONITOR", "1"))
 CAMERA_MONITOR_MAP = os.getenv("CAMERA_MONITOR_MAP", "1=HDMI-1,2=HDMI-2")
 CAMERA_MPV_IPC_DIR = os.getenv("CAMERA_MPV_IPC_DIR", "/tmp/atlas-mpv")
+
+# --- Local LLM (Phi-3 via llama-server) ---
+LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "true").lower() in ("true", "1", "yes")
+LOCAL_LLM_PORT = int(os.getenv("LOCAL_LLM_PORT", "8081"))
+LOCAL_LLM_MAX_TOKENS = int(os.getenv("LOCAL_LLM_MAX_TOKENS", "200"))
+LOCAL_LLM_TIMEOUT = float(os.getenv("LOCAL_LLM_TIMEOUT", "120"))
+LOCAL_LLM_TEMPERATURE = float(os.getenv("LOCAL_LLM_TEMPERATURE", "0.7"))
+
+# --- LLM Routing ---
+# "brain"  = Brain primary, local LLM fallback when Brain is offline
+# "local"  = Local LLM primary for speech queries (Brain still gets vision/security)
+LLM_ROUTE = os.getenv("LLM_ROUTE", "brain")

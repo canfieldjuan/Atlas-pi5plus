@@ -53,14 +53,15 @@ class CameraSkill:
     description = "Show, hide, or move camera feed on monitors"
     patterns = [
         # 0: show camera [on monitor N]
+        # Two branches: full verb OR garbled-verb+me (wake word clips "show" → "S")
         re.compile(
-            r"(?:show|open|display|pull up)(?:\s+me)?\s+(?:the\s+)?"
-            r"(?:camera|cam|webcam|feed|stream)"
+            r"(?:(?:show|open|display|pull up)\s+(?:me\s+)?|(?:\w{1,3}\s+)?me\s+)"
+            r"(?:the\s+)?(?:camera|cam|webcam|feed|stream)"
             r"(?:\s+(?:on|to)\s+(?:monitor|screen|display)\s+(\d))?"
         ),
         # 1: hide camera
         re.compile(
-            r"(?:hide|close|stop|turn off)\s+(?:the\s+)?"
+            r"(?:hide|close|stop|kill|turn off)\s+(?:the\s+)?"
             r"(?:camera|cam|webcam|feed|stream)"
         ),
         # 2: switch/move camera to monitor N
@@ -129,7 +130,7 @@ class CameraSkill:
                     response_text=f"Camera is already showing on monitor {_number_to_word(monitor)}.",
                     skill_name=self.name,
                 )
-            # Different monitor — kill and relaunch
+            # Different monitor -- kill and relaunch
             self._kill_mpv(existing)
             del self._active[cam_name]
 
@@ -177,7 +178,7 @@ class CameraSkill:
 
         cam_name = "cam1"
         if cam_name not in self._active:
-            # Not showing — just launch on target
+            # Not showing -- just launch on target
             proc = self._launch_mpv(cam_name, target, screen_name)
             if proc is None:
                 return SkillResult(
@@ -260,9 +261,10 @@ class CameraSkill:
             "--no-osc",
             "--osd-level=0",
             "--profile=low-latency",
+            "--no-audio",
             "--untimed",
             "--no-cache",
-            "--demuxer-lavf-o=rtsp_transport=tcp",
+            "--demuxer-lavf-o=rtsp_transport=udp,fflags=+nobuffer",
             "--network-timeout=10",
             f"--input-ipc-server={ipc_socket}",
             "--title=atlas-camera",

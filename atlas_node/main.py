@@ -12,6 +12,7 @@ import sys
 from .config import (
     NODE_ID, ATLAS_WS_URL, DASHBOARD_ENABLED,
     IDENTITY_SYNC_ENABLED, STREAMING_TTS_ENABLED,
+    LOCAL_LLM_ENABLED, LLM_ROUTE,
 )
 from .dashboard import DashboardServer
 from .event_store import EventStore
@@ -44,6 +45,18 @@ async def main():
     vision = VisionPipeline(event_store=event_store)
     speech = SpeechPipeline(event_store=event_store)
 
+    # Local LLM (Phi-3 via llama-server)
+    local_llm = None
+    if LOCAL_LLM_ENABLED:
+        try:
+            from .local_llm import LocalLLM
+            local_llm = LocalLLM()
+            await local_llm.start()
+            log.info("Local LLM ready (available=%s, route=%s)", local_llm.available, LLM_ROUTE)
+        except Exception:
+            log.exception("Local LLM init failed -- running without local fallback")
+            local_llm = None
+
     # Initialize hardware
     try:
         vision.init()
@@ -55,6 +68,8 @@ async def main():
     try:
         speech.init()
         speech.set_ws_client(ws)
+        if local_llm:
+            speech.set_local_llm(local_llm)
         log.info("Speech pipeline ready")
     except Exception:
         log.exception("Speech pipeline init failed -- running without speech")
@@ -197,6 +212,8 @@ async def main():
             vision.release()
         if speech:
             speech.release()
+        if local_llm:
+            await local_llm.stop()
         if event_store:
             event_store.close()
         log.info("Atlas Edge Node stopped")

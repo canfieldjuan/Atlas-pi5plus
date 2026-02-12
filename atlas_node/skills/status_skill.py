@@ -35,9 +35,9 @@ class StatusSkill:
     name = "status"
     description = "Reports node uptime and basic status"
     patterns = [
-        re.compile(r"(?:system\s+)?status"),
-        re.compile(r"are\s+you\s+(?:online|working|there|okay|ok)"),
-        re.compile(r"how\s+are\s+you(?:\s+doing)?"),
+        re.compile(r"\b(?:system\s+)?status\s*[?.!]?\s*$"),
+        re.compile(r"\bare\s+you\s+(?:online|working|there|okay|ok)\s*[?.!]?\s*$"),
+        re.compile(r"\bhow\s+are\s+you(?:\s+doing)?\s*[?.!]?\s*$"),
     ]
 
     def __init__(self, ws_client=None):

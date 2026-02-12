@@ -14,10 +14,10 @@ class TimeSkill:
     name = "time"
     description = "Tells the current time, date, or day of the week"
     patterns = [
-        re.compile(r"(?:what(?:'s| is)?\s+)?(?:the\s+)?(?:current\s+)?time(?:\s+(?:is it|right now))?"),
-        re.compile(r"(?:what(?:'s| is)?\s+)?(?:the\s+)?(?:today'?s?\s+)?date(?:\s+today)?"),
-        re.compile(r"what\s+day\s+(?:is\s+it|of\s+the\s+week)"),
-        re.compile(r"(?:tell\s+me\s+)?the\s+time"),
+        re.compile(r"\b(?:what(?:'s| is)?\s+)?(?:the\s+)?(?:current\s+)?time(?:\s+(?:is it|right now))?\s*[?.!]?\s*$"),
+        re.compile(r"\b(?:what(?:'s| is)?\s+)?(?:the\s+)?(?:today'?s?\s+)?date(?:\s+today)?\s*[?.!]?\s*$"),
+        re.compile(r"\bwhat\s+day\s+(?:is\s+it|of\s+the\s+week)"),
+        re.compile(r"\b(?:tell\s+me\s+)?the\s+time\s*[?.!]?\s*$"),
     ]
 
     def __init__(self, timezone: str = "America/Chicago"):

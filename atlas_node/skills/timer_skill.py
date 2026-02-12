@@ -24,6 +24,17 @@ _UNIT_SECONDS = {
 
 _MAX_TIMER_SECONDS = 24 * 3600  # 24 hours
 
+_WORD_TO_NUM = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40,
+    "forty five": 45, "forty-five": 45, "forty five": 45,
+    "fifty": 50, "sixty": 60, "ninety": 90,
+}
+
+_NUM_WORD_PATTERN = r"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty|thirty|forty(?:[- ]five)?|fifty|sixty|ninety)"
+
 
 class TimerSkill:
     """Manages countdown timers with asyncio tasks."""
@@ -31,9 +42,9 @@ class TimerSkill:
     name = "timer"
     description = "Set, check, and cancel countdown timers"
     patterns = [
-        re.compile(r"set\s+(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(seconds?|minutes?|hours?)"),
-        re.compile(r"(?:how\s+much\s+time|how\s+long)\s+(?:is\s+)?(?:left|remaining)(?:\s+on\s+(?:the\s+)?timer)?"),
-        re.compile(r"(?:cancel|stop|clear|delete)\s+(?:the\s+)?timer(?:s)?"),
+        re.compile(r"\bset\s+(?:a\s+)?timer\s+(?:for\s+)?" + _NUM_WORD_PATTERN + r"\s*(seconds?|minutes?|hours?)"),
+        re.compile(r"\b(?:how\s+much\s+time|how\s+long)\s+(?:is\s+)?(?:left|remaining)(?:\s+on\s+(?:the\s+)?timer)?"),
+        re.compile(r"\b(?:cancel|stop|clear|delete)\s+(?:the\s+)?timer(?:s)?"),
     ]
 
     def __init__(
@@ -72,7 +83,11 @@ class TimerSkill:
         return SkillResult(success=False, skill_name=self.name, error="unmatched")
 
     async def _set_timer(self, match: re.Match) -> SkillResult:
-        amount = int(match.group(1))
+        raw_amount = match.group(1).lower()
+        if raw_amount.isdigit():
+            amount = int(raw_amount)
+        else:
+            amount = _WORD_TO_NUM.get(raw_amount, 0)
         unit = match.group(2).lower()
 
         if amount <= 0:
