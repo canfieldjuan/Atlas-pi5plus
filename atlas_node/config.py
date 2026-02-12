@@ -138,3 +138,8 @@ STREAMING_TTS_ENABLED = os.getenv("STREAMING_TTS_ENABLED", "true").lower() in ("
 # --- Local Skills ---
 SKILLS_TIMEZONE = os.getenv("SKILLS_TIMEZONE", "America/Chicago")
 SKILLS_MAX_TIMERS = int(os.getenv("SKILLS_MAX_TIMERS", "10"))
+
+# --- Camera Skill ---
+CAMERA_DEFAULT_MONITOR = int(os.getenv("CAMERA_DEFAULT_MONITOR", "1"))
+CAMERA_MONITOR_MAP = os.getenv("CAMERA_MONITOR_MAP", "1=HDMI-1,2=HDMI-2")
+CAMERA_MPV_IPC_DIR = os.getenv("CAMERA_MPV_IPC_DIR", "/tmp/atlas-mpv")

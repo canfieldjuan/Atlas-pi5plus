@@ -21,11 +21,13 @@ def get_skill_router(ws_client=None, timezone: str = "America/Chicago", max_time
         from .timer_skill import TimerSkill
         from .math_skill import MathSkill
         from .status_skill import StatusSkill
+        from .camera_skill import CameraSkill
 
         registry.register(TimeSkill(timezone=timezone))
         registry.register(TimerSkill(max_timers=max_timers))
         registry.register(MathSkill())
         registry.register(StatusSkill(ws_client=ws_client))
+        registry.register(CameraSkill())
 
         _router = SkillRouter(registry)
     return _router
