@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas Camera Monitor</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+  #video-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  #video-container video, #video-container iframe {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
+  #overlay {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  body:hover #overlay { opacity: 1; }
+  #overlay .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .badge.live { background: #e53e3e; }
+  .badge.connecting { background: #d69e2e; }
+  .badge.disconnected { background: #718096; }
+  #status-line {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #a0aec0;
+  }
+</style>
+</head>
+<body>
+
+<div id="video-container">
+  <div id="overlay">
+    <span id="status-badge" class="badge connecting">CONNECTING</span>
+    <div id="status-line">Initializing...</div>
+  </div>
+  <video id="webrtc-video" autoplay muted playsinline></video>
+</div>
+
+<script>
+const EDGE_HOST = new URLSearchParams(window.location.search).get('host') || '100.95.224.113';
+const STREAM = new URLSearchParams(window.location.search).get('stream') || 'cam1';
+const ATLAS_WS = new URLSearchParams(window.location.search).get('atlas_ws') || 'ws://atlas-brain.tailc7bd29.ts.net:8000/api/v1/ws/monitor';
+const MONITOR_ID = new URLSearchParams(window.location.search).get('monitor') || '1';
+
+const badge = document.getElementById('status-badge');
+const statusLine = document.getElementById('status-line');
+const video = document.getElementById('webrtc-video');
+
+function setStatus(state, text) {
+  badge.className = 'badge ' + state;
+  badge.textContent = state.toUpperCase();
+  statusLine.textContent = text;
+}
+
+// --- WebRTC connection to MediaMTX ---
+let pc = null;
+let restartTimeout = null;
+
+async function startWebRTC(host, stream) {
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+
+  setStatus('connecting', `Connecting to ${stream}@${host}...`);
+
+  pc = new RTCPeerConnection({
+    iceServers: [],
+    sdpSemantics: 'unified-plan',
+  });
+
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+
+  pc.ontrack = (evt) => {
+    if (evt.track.kind === 'video') {
+      video.srcObject = evt.streams[0];
+      setStatus('live', `${stream} @ ${host}`);
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      setStatus('disconnected', 'Stream lost, reconnecting...');
+      scheduleRestart(host, stream);
+    }
+  };
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch(`http://${host}:8889/${stream}/whep`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: pc.localDescription.sdp,
+    });
+
+    if (!res.ok) throw new Error(`WHEP failed: ${res.status}`);
+
+    const answer = await res.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+  } catch (err) {
+    console.error('WebRTC setup failed:', err);
+    setStatus('disconnected', `Failed: ${err.message}`);
+    scheduleRestart(host, stream);
+  }
+}
+
+function scheduleRestart(host, stream) {
+  if (restartTimeout) clearTimeout(restartTimeout);
+  restartTimeout = setTimeout(() => startWebRTC(host, stream), 3000);
+}
+
+// --- Atlas WebSocket for monitor control ---
+let ws = null;
+let wsReconnectDelay = 1000;
+
+function connectAtlas() {
+  try {
+    ws = new WebSocket(`${ATLAS_WS}?monitor=${MONITOR_ID}`);
+  } catch (e) {
+    console.warn('Atlas WS not available:', e.message);
+    return;
+  }
+
+  ws.onopen = () => {
+    console.log('Connected to Atlas');
+    wsReconnectDelay = 1000;
+    ws.send(JSON.stringify({
+      type: 'monitor_register',
+      monitor_id: MONITOR_ID,
+      current_stream: STREAM,
+    }));
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+
+    if (msg.type === 'show_stream') {
+      // Hide iframe if present, restore video
+      const iframe = document.getElementById('url-frame');
+      if (iframe) iframe.remove();
+      video.style.display = '';
+      const host = msg.host || EDGE_HOST;
+      const stream = msg.stream || STREAM;
+      console.log(`Atlas: switch to ${stream}@${host}`);
+      startWebRTC(host, stream);
+    }
+
+    if (msg.type === 'show_url') {
+      // Replace video with iframe showing the URL
+      video.style.display = 'none';
+      let iframe = document.getElementById('url-frame');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'url-frame';
+        iframe.style.cssText = 'width:100%;height:100%;border:none;';
+        document.getElementById('video-container').appendChild(iframe);
+      }
+      iframe.src = msg.url;
+      setStatus('live', msg.url);
+    }
+  };
+
+  ws.onclose = () => {
+    console.log('Atlas WS closed, reconnecting in', wsReconnectDelay, 'ms');
+    setTimeout(connectAtlas, wsReconnectDelay);
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+// --- Start ---
+startWebRTC(EDGE_HOST, STREAM);
+connectAtlas();
+
+// Fullscreen on double-click
+document.addEventListener('dblclick', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+[Unit]
+Description=Atlas Edge Node — vision + speech processing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=canfieldjuan
+Group=canfieldjuan
+WorkingDirectory=/opt/atlas-node
+ExecStart=/opt/atlas-node/venv/bin/python -m atlas_node.main
+Restart=on-failure
+RestartSec=5
+Environment=ATLAS_WS_URL=ws://localhost:8765
+Environment=NODE_ID=edge-opi5plus-01
+# Uncomment and set when Atlas server is ready:
+# Environment=ATLAS_WS_URL=ws://atlas-server:8765
+
+# Resource limits
+MemoryMax=4G
+CPUQuota=80%
+
+# Access to hardware
+SupplementaryGroups=video audio
+
+[Install]
+WantedBy=multi-user.target

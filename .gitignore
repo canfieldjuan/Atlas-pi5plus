@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.eggs/
+
+# Virtual environment
+venv/
+
+# Models (large binary files)
+models/
+
+# Runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Identity databases (contain embeddings)
+face_db/
+face_unknown/
+gait_db/
+speaker_db/
+
+# Environment / secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

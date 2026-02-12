@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas Security Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232733;
+    --border: #2d3244;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --green: #22c55e;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 16px; font-weight: 600; }
+  .header .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .header .status-dot.online { background: var(--green); }
+  .header .status-dot.offline { background: var(--red); }
+  .header .conn-status { font-size: 12px; color: var(--text2); }
+
+  /* Main layout */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  @media (min-width: 768px) {
+    .main {
+      grid-template-columns: 1fr 380px;
+      gap: 16px;
+      padding: 16px;
+    }
+    .video-section { grid-row: 1 / 4; }
+  }
+
+  /* Video */
+  .video-section {
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  .video-section video {
+    width: 100%;
+    aspect-ratio: 16/9;
+    display: block;
+    object-fit: contain;
+    background: #000;
+  }
+  .video-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .video-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .video-badge.live { background: var(--red); }
+  .video-badge.connecting { background: var(--orange); color: #000; }
+  .video-badge.offline { background: var(--border); }
+
+  /* Panel */
+  .panel {
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-body { padding: 10px 14px; }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .stat-card {
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .stat-card .label {
+    font-size: 11px;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .stat-card .value {
+    font-size: 20px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.orange { color: var(--orange); }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.blue { color: var(--blue); }
+
+  /* Detections */
+  .detection-list { list-style: none; }
+  .detection-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  .detection-item:last-child { border-bottom: none; }
+  .detection-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .detection-icon.known { background: rgba(34,197,94,0.15); }
+  .detection-icon.unknown { background: rgba(239,68,68,0.15); }
+  .detection-icon.object { background: rgba(59,130,246,0.15); }
+  .detection-name { font-weight: 500; flex: 1; }
+  .detection-conf {
+    font-size: 12px;
+    color: var(--text2);
+    font-variant-numeric: tabular-nums;
+  }
+  .empty-state {
+    padding: 20px 14px;
+    text-align: center;
+    color: var(--text2);
+    font-size: 13px;
+  }
+
+  /* Events */
+  .event-list { list-style: none; max-height: 400px; overflow-y: auto; }
+  .event-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  .event-item:last-child { border-bottom: none; }
+  .event-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .event-badge.entered { background: rgba(34,197,94,0.2); color: var(--green); }
+  .event-badge.left { background: rgba(245,158,11,0.2); color: var(--orange); }
+  .event-badge.motion { background: rgba(59,130,246,0.2); color: var(--blue); }
+  .event-badge.unknown { background: rgba(239,68,68,0.2); color: var(--red); }
+  .event-badge.recognition { background: rgba(168,85,247,0.2); color: var(--purple); }
+  .event-detail { flex: 1; min-width: 0; }
+  .event-detail .name { font-weight: 500; font-size: 13px; }
+  .event-detail .meta { font-size: 11px; color: var(--text2); }
+  .event-time {
+    font-size: 11px;
+    color: var(--text2);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Atlas Security</h1>
+  <div class="conn-status">
+    <span id="ws-dot" class="status-dot offline"></span>
+    <span id="ws-status">Connecting...</span>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Video -->
+  <div class="video-section">
+    <div class="video-overlay">
+      <span id="video-badge" class="video-badge connecting">CONNECTING</span>
+    </div>
+    <video id="webrtc-video" autoplay muted playsinline></video>
+  </div>
+
+  <!-- Summary -->
+  <div class="panel">
+    <div class="panel-header">Summary</div>
+    <div class="summary-grid">
+      <div class="stat-card">
+        <div class="label">People Now</div>
+        <div class="value blue" id="stat-tracks">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Known Faces</div>
+        <div class="value purple" id="stat-faces">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Uptime</div>
+        <div class="value green" id="stat-uptime">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Brain</div>
+        <div class="value" id="stat-brain">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Detections -->
+  <div class="panel">
+    <div class="panel-header">Live Detections</div>
+    <ul id="detection-list" class="detection-list">
+      <li class="empty-state">Waiting for detections...</li>
+    </ul>
+  </div>
+
+  <!-- Events -->
+  <div class="panel">
+    <div class="panel-header">Events</div>
+    <ul id="event-list" class="event-list">
+      <li class="empty-state">Loading events...</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const EDGE_HOST = location.hostname || '100.95.224.113';
+const WS_URL = `ws://${location.host}/ws/live`;
+const WHEP_URL = `http://${EDGE_HOST}:8889/cam1/whep`;
+
+// --- Utilities ---
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const now = Date.now();
+  const s = Math.floor((now - d.getTime()) / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function formatUptime(secs) {
+  if (secs < 60) return Math.floor(secs) + 's';
+  const m = Math.floor(secs / 60);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h < 24) return h + 'h ' + rm + 'm';
+  return Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// --- WebRTC (MediaMTX WHEP) ---
+
+let pc = null;
+let rtcRetryTimeout = null;
+const videoBadge = document.getElementById('video-badge');
+const videoEl = document.getElementById('webrtc-video');
+
+async function startWebRTC() {
+  if (pc) { pc.close(); pc = null; }
+  videoBadge.className = 'video-badge connecting';
+  videoBadge.textContent = 'CONNECTING';
+
+  pc = new RTCPeerConnection({ iceServers: [] });
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+
+  pc.ontrack = (evt) => {
+    if (evt.track.kind === 'video') {
+      videoEl.srcObject = evt.streams[0];
+      videoBadge.className = 'video-badge live';
+      videoBadge.textContent = 'LIVE';
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      videoBadge.className = 'video-badge offline';
+      videoBadge.textContent = 'OFFLINE';
+      scheduleRTCRestart();
+    }
+  };
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    const res = await fetch(WHEP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: pc.localDescription.sdp,
+    });
+    if (!res.ok) throw new Error('WHEP ' + res.status);
+    const answer = await res.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+  } catch (err) {
+    console.error('WebRTC failed:', err);
+    videoBadge.className = 'video-badge offline';
+    videoBadge.textContent = 'OFFLINE';
+    scheduleRTCRestart();
+  }
+}
+
+function scheduleRTCRestart() {
+  if (rtcRetryTimeout) clearTimeout(rtcRetryTimeout);
+  rtcRetryTimeout = setTimeout(startWebRTC, 3000);
+}
+
+// Fullscreen on double-click
+videoEl.addEventListener('dblclick', () => {
+  if (!document.fullscreenElement) {
+    videoEl.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+});
+
+// --- Dashboard WebSocket ---
+
+let ws = null;
+let wsRetryDelay = 1000;
+const wsDot = document.getElementById('ws-dot');
+const wsStatusEl = document.getElementById('ws-status');
+
+function connectWS() {
+  try { ws = new WebSocket(WS_URL); } catch(e) { return; }
+
+  ws.onopen = () => {
+    wsDot.className = 'status-dot online';
+    wsStatusEl.textContent = 'Connected';
+    wsRetryDelay = 1000;
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch { return; }
+
+    if (msg.type === 'vision') {
+      updateDetections(msg.detections || []);
+    } else if (msg.type === 'security') {
+      prependEvent(msg);
+    }
+  };
+
+  ws.onclose = () => {
+    wsDot.className = 'status-dot offline';
+    wsStatusEl.textContent = 'Reconnecting...';
+    setTimeout(connectWS, wsRetryDelay);
+    wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+// --- Detection panel ---
+
+const detectionListEl = document.getElementById('detection-list');
+
+function updateDetections(detections) {
+  if (detections.length === 0) {
+    detectionListEl.innerHTML = '<li class="empty-state">No detections</li>';
+    return;
+  }
+
+  let html = '';
+  for (const d of detections) {
+    const isPerson = d.label === 'person';
+    const name = d.name || d.label;
+    const isKnown = d.name && d.name !== 'unknown';
+    let iconClass = 'object';
+    let icon = '&#x1f4e6;'; // package
+    if (isPerson) {
+      iconClass = isKnown ? 'known' : 'unknown';
+      icon = '&#x1f464;'; // person silhouette
+    }
+    const conf = d.confidence !== undefined ? (d.confidence * 100).toFixed(0) + '%' : '';
+
+    html += `<li class="detection-item">
+      <div class="detection-icon ${iconClass}">${icon}</div>
+      <span class="detection-name">${escapeHtml(name)}</span>
+      <span class="detection-conf">${conf}</span>
+    </li>`;
+  }
+  detectionListEl.innerHTML = html;
+}
+
+// --- Events panel ---
+
+const eventListEl = document.getElementById('event-list');
+const MAX_EVENTS = 50;
+let events = [];
+
+function getEventBadge(evt) {
+  const etype = evt.event || evt.event_type || '';
+  if (etype.includes('entered')) return { cls: 'entered', text: 'entered' };
+  if (etype.includes('left')) return { cls: 'left', text: 'left' };
+  if (etype.includes('motion')) return { cls: 'motion', text: 'motion' };
+  if (etype.includes('unknown')) return { cls: 'unknown', text: 'unknown' };
+  if (evt.table === 'recognition') return { cls: 'recognition', text: 'recognized' };
+  return { cls: 'motion', text: etype || 'event' };
+}
+
+function renderEventItem(evt) {
+  const badge = getEventBadge(evt);
+  const name = evt.name || evt.person_name || '';
+  const ts = evt.timestamp || '';
+  const conf = evt.confidence || evt.combined_confidence;
+  const confStr = conf ? (conf * 100).toFixed(0) + '%' : '';
+  const meta = [name, confStr].filter(Boolean).join(' - ');
+
+  return `<li class="event-item">
+    <span class="event-badge ${badge.cls}">${badge.text}</span>
+    <div class="event-detail">
+      ${meta ? `<div class="name">${escapeHtml(meta)}</div>` : ''}
+    </div>
+    <span class="event-time">${ts ? timeAgo(ts) : ''}</span>
+  </li>`;
+}
+
+function renderEvents() {
+  if (events.length === 0) {
+    eventListEl.innerHTML = '<li class="empty-state">No recent events</li>';
+    return;
+  }
+  eventListEl.innerHTML = events.map(renderEventItem).join('');
+}
+
+function prependEvent(evt) {
+  // Convert WS security event to event-list format
+  const item = {
+    ...evt,
+    timestamp: evt.timestamp || new Date(evt.ts ? evt.ts * 1000 : Date.now()).toISOString(),
+  };
+  events.unshift(item);
+  if (events.length > MAX_EVENTS) events.pop();
+  renderEvents();
+}
+
+// --- Status polling ---
+
+const statTracks = document.getElementById('stat-tracks');
+const statFaces = document.getElementById('stat-faces');
+const statUptime = document.getElementById('stat-uptime');
+const statBrain = document.getElementById('stat-brain');
+
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status');
+    if (!res.ok) return;
+    const s = await res.json();
+    statTracks.textContent = s.active_tracks;
+    statFaces.textContent = s.face_db_count;
+    statUptime.textContent = formatUptime(s.uptime);
+    statBrain.textContent = s.brain_connected ? 'Online' : 'Offline';
+    statBrain.className = 'value ' + (s.brain_connected ? 'green' : 'red');
+  } catch {}
+}
+
+async function fetchEvents() {
+  try {
+    const res = await fetch('/api/events?hours=24&limit=50');
+    if (!res.ok) return;
+    events = await res.json();
+    renderEvents();
+  } catch {}
+}
+
+// --- Refresh relative timestamps ---
+
+setInterval(() => { renderEvents(); }, 30000);
+
+// --- Update event timestamps periodically ---
+
+setInterval(fetchStatus, 10000);
+
+// --- Boot ---
+
+startWebRTC();
+connectWS();
+fetchStatus();
+fetchEvents();
+</script>
+</body>
+</html>
