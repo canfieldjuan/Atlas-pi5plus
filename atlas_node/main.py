@@ -18,6 +18,7 @@ from .dashboard import DashboardServer
 from .event_store import EventStore
 from .identity_sync import IdentitySyncManager
 from .sentence_buffer import SentenceBuffer
+from .startup_display import StartupDisplay
 from .vision import VisionPipeline
 from .speech import SpeechPipeline
 from .ws_client import AtlasWSClient
@@ -33,13 +34,20 @@ log = logging.getLogger("atlas-node")
 async def main():
     log.info("Atlas Edge Node starting -- id=%s target=%s", NODE_ID, ATLAS_WS_URL)
 
+    display = StartupDisplay()
+    display.show_banner()
+
     ws = AtlasWSClient()
+
+    display.update("Event Store", "init")
     event_store = EventStore()
     try:
         event_store.init()
         log.info("EventStore ready")
+        display.update("Event Store", "ok")
     except Exception:
         log.exception("EventStore init failed -- running without event logging")
+        display.update("Event Store", "fail")
         event_store = None
 
     vision = VisionPipeline(event_store=event_store)
@@ -48,31 +56,44 @@ async def main():
     # Local LLM (Phi-3 via llama-server)
     local_llm = None
     if LOCAL_LLM_ENABLED:
+        display.update("Local LLM", "init")
         try:
             from .local_llm import LocalLLM
             local_llm = LocalLLM()
             await local_llm.start()
             log.info("Local LLM ready (available=%s, route=%s)", local_llm.available, LLM_ROUTE)
+            display.update("Local LLM", "ok")
         except Exception:
             log.exception("Local LLM init failed -- running without local fallback")
+            display.update("Local LLM", "fail")
             local_llm = None
+    else:
+        display.update("Local LLM", "skip")
 
-    # Initialize hardware
+    # Initialize hardware (suppress RKNN C library stdout noise)
+    display.update("Vision Pipeline", "init")
     try:
-        vision.init()
+        with display.suppress_native_stdout():
+            vision.init()
         log.info("Vision pipeline ready")
+        display.update("Vision Pipeline", "ok")
     except Exception:
         log.exception("Vision pipeline init failed -- running without vision")
+        display.update("Vision Pipeline", "fail")
         vision = None
 
+    display.update("Speech Pipeline", "init")
     try:
-        speech.init()
+        with display.suppress_native_stdout():
+            speech.init()
         speech.set_ws_client(ws)
         if local_llm:
             speech.set_local_llm(local_llm)
         log.info("Speech pipeline ready")
+        display.update("Speech Pipeline", "ok")
     except Exception:
         log.exception("Speech pipeline init failed -- running without speech")
+        display.update("Speech Pipeline", "fail")
         speech = None
 
     if vision is None and speech is None:
@@ -84,6 +105,9 @@ async def main():
     if DASHBOARD_ENABLED:
         dashboard = DashboardServer(event_store, ws, vision)
         log.info("Dashboard enabled")
+        display.update("Dashboard", "ok")
+    else:
+        display.update("Dashboard", "skip")
 
     # Identity sync (Brain <-> Edge embedding distribution)
     sync_manager = None
@@ -93,6 +117,9 @@ async def main():
         speaker_db = speech._speaker_id._db if speech and hasattr(speech, "_speaker_id") and speech._speaker_id else None
         sync_manager = IdentitySyncManager(ws, face_db=face_db, gait_db=gait_db, speaker_db=speaker_db)
         log.info("Identity sync enabled")
+        display.update("Identity Sync", "ok")
+    else:
+        display.update("Identity Sync", "skip")
 
     # Wire Brain responses -> TTS (voice-to-voice return path)
     tts_queue = asyncio.Queue(maxsize=TTS_QUEUE_MAXSIZE)
@@ -171,11 +198,13 @@ async def main():
 
     # Build task list
     tasks = [asyncio.create_task(ws.run())]
+    display.update("Brain WebSocket", "ok")
 
     if tts_engine:
         tasks.append(asyncio.create_task(_tts_worker()))
         mode = "streaming" if STREAMING_TTS_ENABLED else "full-response"
         log.info("Brain -> TTS wired (%s mode)", mode)
+        display.update("TTS Engine", "ok")
 
     if sync_manager:
         tasks.append(asyncio.create_task(sync_manager.periodic_sync()))
@@ -187,6 +216,8 @@ async def main():
         tasks.append(asyncio.create_task(vision.run(send_all)))
     if speech:
         tasks.append(asyncio.create_task(speech.run(send_all)))
+
+    display.show_ready()
 
     # Graceful shutdown
     loop = asyncio.get_running_loop()
