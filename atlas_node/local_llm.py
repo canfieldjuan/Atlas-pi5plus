@@ -46,7 +46,10 @@ class LocalLLM:
 
     async def stop(self):
         if self._session:
-            await self._session.close()
+            try:
+                await self._session.close()
+            except Exception:
+                log.exception("Error closing local LLM session")
             self._session = None
 
     async def _check_health(self):

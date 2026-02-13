@@ -328,6 +328,9 @@ class VisionPipeline:
                 # Still update tracker (age tracks) even without motion
                 _, lost = self._track_mgr.update_detections(np.array([]).reshape(0, 4))
                 events.extend(self._lost_track_events(lost))
+                if self._gait_rec:
+                    for t in lost:
+                        self._gait_rec.cleanup_track(t.track_id)
                 deleted = self._track_mgr.cleanup()
                 for t in deleted:
                     if self._gait_rec:
@@ -366,6 +369,9 @@ class VisionPipeline:
         # 4. Update tracker
         matched, lost = self._track_mgr.update_detections(person_bboxes_arr)
         events.extend(self._lost_track_events(lost))
+        if self._gait_rec:
+            for t in lost:
+                self._gait_rec.cleanup_track(t.track_id)
 
         confirmed = self._track_mgr.get_confirmed_tracks()
 
@@ -409,17 +415,18 @@ class VisionPipeline:
 
         t_gait = time.perf_counter()
 
-        log.debug(
-            "frame timing: motion=%.1fms yolo=%.1fms face=%.1fms gait=%.1fms total=%.1fms",
-            (t_motion - t_start) * 1000,
-            (t_yolo - t_motion) * 1000,
-            (t_face - t_yolo) * 1000,
-            (t_gait - t_face) * 1000,
-            (t_gait - t_start) * 1000,
-        )
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug(
+                "frame timing: motion=%.1fms yolo=%.1fms face=%.1fms gait=%.1fms total=%.1fms",
+                (t_motion - t_start) * 1000,
+                (t_yolo - t_motion) * 1000,
+                (t_face - t_yolo) * 1000,
+                (t_gait - t_face) * 1000,
+                (t_gait - t_start) * 1000,
+            )
 
         # 7. Collect person_entered events for newly identified confirmed tracks
-        for t in self._track_mgr.get_confirmed_tracks():
+        for t in confirmed:
             if self._track_mgr.needs_enter_announcement(t.track_id):
                 events.append({
                     "event": "person_entered",
@@ -526,6 +533,7 @@ class VisionPipeline:
         interval = 1.0 / config.VISION_FPS
         loop = asyncio.get_running_loop()
         consecutive_failures = 0
+        reconnect_delay = 1.0
 
         while True:
             t0 = time.monotonic()
@@ -533,15 +541,17 @@ class VisionPipeline:
             if not ret:
                 consecutive_failures += 1
                 if consecutive_failures >= 10:
-                    log.warning("Stream read failed %d times, reconnecting...",
-                                consecutive_failures)
-                    await asyncio.sleep(3)
+                    log.warning("Stream read failed %d times, reconnecting in %.1fs...",
+                                consecutive_failures, reconnect_delay)
+                    await asyncio.sleep(reconnect_delay)
                     if self._reopen_stream():
                         log.info("Stream reconnected")
                         consecutive_failures = 0
+                        reconnect_delay = 1.0
                     else:
-                        log.error("Reconnect failed, retrying in 5s...")
-                        await asyncio.sleep(5)
+                        reconnect_delay = min(reconnect_delay * 2, 30.0)
+                        log.error("Reconnect failed, next attempt in %.1fs",
+                                  reconnect_delay)
                 else:
                     await asyncio.sleep(0.5)
                 continue

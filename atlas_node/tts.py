@@ -143,18 +143,8 @@ class TTSEngine:
             with wave.open(tmp_path, "wb") as wf:
                 self._engine.synthesize_wav(text, wf)
 
-            self.is_speaking.set()
-            subprocess.run(
-                ["aplay", "-q", "-D", self._output_device, tmp_path],
-                timeout=config.TTS_APLAY_TIMEOUT,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            log.warning("aplay timed out")
-        except FileNotFoundError:
-            log.error("aplay not found -- install alsa-utils")
+            self._play_wav(tmp_path)
         finally:
-            self.is_speaking.clear()
             if tmp_path:
                 try:
                     os.unlink(tmp_path)
@@ -182,23 +172,34 @@ class TTSEngine:
                 wf.setframerate(self._sample_rate)
                 wf.writeframes(pcm16.tobytes())
 
-            self.is_speaking.set()
-            subprocess.run(
-                ["aplay", "-q", "-D", self._output_device, tmp_path],
-                timeout=config.TTS_APLAY_TIMEOUT,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            log.warning("aplay timed out")
-        except FileNotFoundError:
-            log.error("aplay not found -- install alsa-utils")
+            self._play_wav(tmp_path)
         finally:
-            self.is_speaking.clear()
             if tmp_path:
                 try:
                     os.unlink(tmp_path)
                 except OSError:
                     pass
+
+    def _play_wav(self, path: str) -> None:
+        """Play a WAV file via aplay, managing is_speaking flag."""
+        try:
+            proc = subprocess.Popen(
+                ["aplay", "-q", "-D", self._output_device, path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            log.error("aplay not found -- install alsa-utils")
+            return
+        self.is_speaking.set()
+        try:
+            proc.wait(timeout=config.TTS_APLAY_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            log.warning("aplay timed out, killing")
+            proc.kill()
+            proc.wait()
+        finally:
+            self.is_speaking.clear()
 
     def stop(self):
         """Stop current playback."""

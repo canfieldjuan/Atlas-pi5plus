@@ -231,13 +231,18 @@ class FaceRecognizer:
 
         # Load MobileFaceNet on NPU core 2
         log.info("Loading MobileFaceNet: %s", config.FACE_REC_MODEL_PATH)
-        self._rknn_rec = RKNNLite()
-        ret = self._rknn_rec.load_rknn(config.FACE_REC_MODEL_PATH)
-        if ret != 0:
-            raise RuntimeError(f"Failed to load MobileFaceNet (code {ret})")
-        ret = self._rknn_rec.init_runtime(core_mask=RKNNLite.NPU_CORE_2)
-        if ret != 0:
-            raise RuntimeError(f"Failed to init MobileFaceNet runtime (code {ret})")
+        try:
+            self._rknn_rec = RKNNLite()
+            ret = self._rknn_rec.load_rknn(config.FACE_REC_MODEL_PATH)
+            if ret != 0:
+                raise RuntimeError(f"Failed to load MobileFaceNet (code {ret})")
+            ret = self._rknn_rec.init_runtime(core_mask=RKNNLite.NPU_CORE_2)
+            if ret != 0:
+                raise RuntimeError(f"Failed to init MobileFaceNet runtime (code {ret})")
+        except Exception:
+            self._rknn_det.release()
+            self._rknn_det = None
+            raise
         log.info("MobileFaceNet ready on NPU core 2")
 
         # Load face database

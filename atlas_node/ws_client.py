@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import random
 import time
 from typing import Callable, Awaitable
 
@@ -52,12 +53,13 @@ class AtlasWSClient:
                 log.info("Connected to Atlas at %s", config.ATLAS_WS_URL)
                 return
             except Exception as exc:
+                jitter = self._backoff * random.uniform(0.5, 1.0)
                 log.warning(
                     "WS connect failed (%s), retrying in %.1fs",
                     exc,
-                    self._backoff,
+                    jitter,
                 )
-                await asyncio.sleep(self._backoff)
+                await asyncio.sleep(jitter)
                 self._backoff = min(self._backoff * 2, config.WS_RECONNECT_MAX)
 
     async def send(self, msg: dict):

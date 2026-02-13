@@ -267,7 +267,10 @@ class SpeechPipeline:
             if speaker_name:
                 msg["speaker"] = speaker_name
                 msg["speaker_confidence"] = round(speaker_conf, 3)
-        await on_transcript(msg)
+        try:
+            await on_transcript(msg)
+        except Exception:
+            log.exception("on_transcript callback failed")
 
     async def _query_local_llm(self, text, speaker_name):
         response = await self._local_llm.query(text, speaker=speaker_name)

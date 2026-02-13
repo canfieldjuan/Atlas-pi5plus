@@ -15,12 +15,16 @@ from . import config
 log = logging.getLogger(__name__)
 
 
+_ROTATE_INTERVAL = 3600  # seconds between rotation checks
+
+
 class EventStore:
     """SQLite-backed event logging for the edge node."""
 
     def __init__(self, db_path: str | None = None):
         self._db_path = db_path or config.EVENT_DB_PATH
         self._conn: sqlite3.Connection | None = None
+        self._last_rotate: float = 0.0
 
     def init(self):
         """Open database and create tables."""
@@ -67,7 +71,15 @@ class EventStore:
         self._conn.commit()
 
         self._rotate()
+        self._last_rotate = time.time()
         log.info("EventStore ready: %s", self._db_path)
+
+    def _maybe_rotate(self):
+        """Run rotation if enough time has elapsed since last check."""
+        now = time.time()
+        if now - self._last_rotate >= _ROTATE_INTERVAL:
+            self._rotate()
+            self._last_rotate = now
 
     def log_recognition(
         self,
@@ -96,6 +108,7 @@ class EventStore:
             ),
         )
         self._conn.commit()
+        self._maybe_rotate()
 
     def log_security(
         self,
@@ -122,6 +135,7 @@ class EventStore:
             ),
         )
         self._conn.commit()
+        self._maybe_rotate()
 
     def query_recent(
         self,
@@ -197,6 +211,10 @@ class EventStore:
 
     def close(self):
         if self._conn:
+            try:
+                self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                log.debug("WAL checkpoint on close failed", exc_info=True)
             self._conn.close()
             self._conn = None
             log.info("EventStore closed")
