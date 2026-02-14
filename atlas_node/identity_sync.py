@@ -88,6 +88,24 @@ class IdentitySyncManager:
             sum(len(v) for v in deletes.values()),
         )
 
+        # Push embeddings that Brain is missing (edge-only identities)
+        need_from_edge = msg.get("need_from_edge", {})
+        pushed = 0
+        for modality in MODALITIES:
+            for name in need_from_edge.get(modality, []):
+                path = Path(_DB_DIRS[modality]) / f"{name}.npy"
+                if not path.exists():
+                    log.warning("Brain requested %s/%s but file missing locally", modality, name)
+                    continue
+                try:
+                    embedding = np.load(path)
+                    await self.push_registration(name, modality, embedding)
+                    pushed += 1
+                except Exception:
+                    log.exception("Failed to push %s/%s to Brain", modality, name)
+        if pushed:
+            log.info("Identity sync: pushed %d embeddings Brain was missing", pushed)
+
     async def _handle_update(self, msg: dict):
         """Handle single identity update pushed from Brain."""
         name = msg.get("name")
