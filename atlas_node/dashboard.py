@@ -2,7 +2,7 @@
 
 Serves a mobile-friendly security dashboard at :8080 with:
   - GET /           -> dashboard.html (static)
-  - GET /api/events -> recent events from SQLite
+  - GET /api/events -> recent events proxied from Brain alerts API
   - GET /api/status -> system health / summary
   - GET /api/faces  -> known face names
   - WS  /ws/live    -> real-time vision + security event stream
@@ -14,6 +14,7 @@ import logging
 import time
 from pathlib import Path
 
+import aiohttp
 from aiohttp import web
 
 from . import config
@@ -26,13 +27,13 @@ WEB_DIR = config.BASE_DIR / "web"
 class DashboardServer:
     """aiohttp-based local dashboard server."""
 
-    def __init__(self, event_store=None, ws_client=None, vision_pipeline=None):
-        self._event_store = event_store
+    def __init__(self, ws_client=None, vision_pipeline=None):
         self._ws_client = ws_client
         self._vision = vision_pipeline
         self._clients: set[web.WebSocketResponse] = set()
         self._app: web.Application | None = None
         self._runner: web.AppRunner | None = None
+        self._session: aiohttp.ClientSession | None = None
         self._start_time = time.time()
 
     # --- WebSocket broadcast ---
@@ -60,19 +61,51 @@ class DashboardServer:
         return web.FileResponse(html_path)
 
     async def _handle_events(self, request: web.Request) -> web.Response:
-        hours = float(request.query.get("hours", "1"))
-        person = request.query.get("person")
-        event_type = request.query.get("type")
+        hours = float(request.query.get("hours", "24"))
         limit = int(request.query.get("limit", "50"))
 
-        if self._event_store:
-            events = self._event_store.query_recent(
-                hours=hours, person=person, event_type=event_type, limit=limit,
-            )
-        else:
-            events = []
+        brain_url = f"{config.BRAIN_API_BASE}/alerts"
+        params = {
+            "event_type": "security",
+            "node_id": config.NODE_ID,
+            "include_acknowledged": "true",
+            "since_minutes": str(int(hours * 60)),
+            "limit": str(limit),
+        }
 
-        return web.json_response(events, headers=self._cors_headers())
+        try:
+            async with self._session.get(
+                brain_url,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=config.BRAIN_API_TIMEOUT),
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    events = self._transform_alerts(data.get("alerts", []))
+                    return web.json_response(events, headers=self._cors_headers())
+        except Exception:
+            log.debug("Brain API unreachable for events", exc_info=True)
+
+        return web.json_response([], headers=self._cors_headers())
+
+    @staticmethod
+    def _transform_alerts(alerts: list[dict]) -> list[dict]:
+        """Transform Brain alert objects to edge dashboard event format."""
+        events = []
+        for a in alerts:
+            ed = a.get("event_data") or {}
+            events.append({
+                "table": "security",
+                "timestamp": a.get("triggered_at", ""),
+                "event_type": ed.get("event", a.get("rule_name", "").replace("edge_security_", "")),
+                "confidence": ed.get("confidence", ed.get("combined_confidence", 0)),
+                "person_name": ed.get("name"),
+                "track_id": ed.get("track_id"),
+                "is_known": ed.get("is_known"),
+                "duration": ed.get("duration"),
+                "metadata": ed,
+            })
+        return events
 
     async def _handle_status(self, request: web.Request) -> web.Response:
         active_tracks = 0
@@ -146,6 +179,8 @@ class DashboardServer:
 
     async def start(self):
         """Create and start the aiohttp application."""
+        self._session = aiohttp.ClientSession()
+
         self._app = web.Application()
         self._app.router.add_get("/", self._handle_index)
         self._app.router.add_get("/api/events", self._handle_events)
@@ -183,6 +218,10 @@ class DashboardServer:
         for ws in list(self._clients):
             await ws.close()
         self._clients.clear()
+
+        if self._session:
+            await self._session.close()
+            self._session = None
 
         if self._runner:
             await self._runner.cleanup()

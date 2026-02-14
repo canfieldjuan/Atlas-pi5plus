@@ -111,9 +111,15 @@ MOTION_COOLDOWN_SECONDS = float(os.getenv("MOTION_COOLDOWN_SECONDS", "10.0"))
 MOTION_LEARNING_RATE = float(os.getenv("MOTION_LEARNING_RATE", "0.005"))
 MOTION_WARMUP_FRAMES = int(os.getenv("MOTION_WARMUP_FRAMES", "30"))
 
-# --- Event Store ---
-EVENT_DB_PATH = os.getenv("EVENT_DB_PATH", str(BASE_DIR / "data" / "events.db"))
-EVENT_RETENTION_DAYS = int(os.getenv("EVENT_RETENTION_DAYS", "30"))
+# --- Offline Event Buffer ---
+OFFLINE_BUFFER_DB_PATH = os.getenv("OFFLINE_BUFFER_DB_PATH", str(BASE_DIR / "data" / "offline_buffer.db"))
+OFFLINE_BUFFER_RETENTION_DAYS = int(os.getenv("OFFLINE_BUFFER_RETENTION_DAYS", "7"))
+OFFLINE_BUFFER_DRAIN_BATCH = int(os.getenv("OFFLINE_BUFFER_DRAIN_BATCH", "50"))
+OFFLINE_BUFFER_DRAIN_INTERVAL = float(os.getenv("OFFLINE_BUFFER_DRAIN_INTERVAL", "5.0"))
+
+# --- Brain REST API ---
+BRAIN_API_BASE = os.getenv("BRAIN_API_BASE", f"http://{ATLAS_BRAIN_HOST}:{ATLAS_BRAIN_PORT}/api/v1")
+BRAIN_API_TIMEOUT = float(os.getenv("BRAIN_API_TIMEOUT", "2.0"))
 
 # --- Dashboard ---
 DASHBOARD_ENABLED = os.getenv("DASHBOARD_ENABLED", "true").lower() in ("true", "1", "yes")

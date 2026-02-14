@@ -1,13 +1,13 @@
-"""Local SQLite event store for security and recognition events.
+"""Offline event buffer for critical events during Brain disconnections.
 
-WAL mode for concurrent read/write, with automatic 30-day rotation.
+Persists security and recognition events to a local SQLite queue when Brain
+is unreachable.  Events are drained to Brain on reconnect via the WS client.
 """
 
 import json
 import logging
 import sqlite3
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import config
@@ -15,19 +15,15 @@ from . import config
 log = logging.getLogger(__name__)
 
 
-_ROTATE_INTERVAL = 3600  # seconds between rotation checks
-
-
-class EventStore:
-    """SQLite-backed event logging for the edge node."""
+class OfflineEventBuffer:
+    """SQLite-backed FIFO queue for critical events that must survive Brain outages."""
 
     def __init__(self, db_path: str | None = None):
-        self._db_path = db_path or config.EVENT_DB_PATH
+        self._db_path = db_path or config.OFFLINE_BUFFER_DB_PATH
         self._conn: sqlite3.Connection | None = None
-        self._last_rotate: float = 0.0
 
     def init(self):
-        """Open database and create tables."""
+        """Open database and create table."""
         db_dir = Path(self._db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
 
@@ -35,181 +31,78 @@ class EventStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
 
-        self._conn.executescript("""
-            CREATE TABLE IF NOT EXISTS recognition_events (
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS pending_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                epoch REAL NOT NULL,
-                person_name TEXT NOT NULL,
-                recognition_type TEXT NOT NULL,
-                confidence REAL NOT NULL,
-                track_id INTEGER,
-                camera_source TEXT DEFAULT 'cam1',
-                metadata TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS security_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                epoch REAL NOT NULL,
-                event_type TEXT NOT NULL,
-                confidence REAL DEFAULT 0.0,
-                track_id INTEGER,
-                camera_source TEXT DEFAULT 'cam1',
-                metadata TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_recog_timestamp
-                ON recognition_events(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_recog_person
-                ON recognition_events(person_name);
-            CREATE INDEX IF NOT EXISTS idx_sec_timestamp
-                ON security_events(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_sec_type
-                ON security_events(event_type);
+                created_at REAL NOT NULL,
+                msg_type TEXT NOT NULL,
+                payload TEXT NOT NULL
+            )
         """)
         self._conn.commit()
 
-        self._rotate()
-        self._last_rotate = time.time()
-        log.info("EventStore ready: %s", self._db_path)
+        # Cleanup events older than retention period
+        cutoff = time.time() - config.OFFLINE_BUFFER_RETENTION_DAYS * 86400
+        cur = self._conn.execute(
+            "DELETE FROM pending_events WHERE created_at < ?", (cutoff,)
+        )
+        if cur.rowcount > 0:
+            self._conn.commit()
+            log.info("Cleaned up %d expired buffered events", cur.rowcount)
 
-    def _maybe_rotate(self):
-        """Run rotation if enough time has elapsed since last check."""
-        now = time.time()
-        if now - self._last_rotate >= _ROTATE_INTERVAL:
-            self._rotate()
-            self._last_rotate = now
+        count = self.count()
+        log.info("OfflineEventBuffer ready: %s (%d pending)", self._db_path, count)
 
-    def log_recognition(
-        self,
-        person_name: str,
-        recognition_type: str,
-        confidence: float,
-        track_id: int | None = None,
-        metadata: dict | None = None,
-    ):
-        """Log a recognition event (face, gait, face+gait, speaker)."""
+    def enqueue(self, msg_type: str, payload: dict) -> None:
+        """Persist a critical event for later delivery."""
         if not self._conn:
             return
-        now = datetime.now()
         self._conn.execute(
-            """INSERT INTO recognition_events
-               (timestamp, epoch, person_name, recognition_type, confidence, track_id, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                now.isoformat(),
-                time.time(),
-                person_name,
-                recognition_type,
-                confidence,
-                track_id,
-                json.dumps(metadata) if metadata else None,
-            ),
+            "INSERT INTO pending_events (created_at, msg_type, payload) VALUES (?, ?, ?)",
+            (time.time(), msg_type, json.dumps(payload)),
         )
         self._conn.commit()
-        self._maybe_rotate()
 
-    def log_security(
-        self,
-        event_type: str,
-        confidence: float = 0.0,
-        track_id: int | None = None,
-        metadata: dict | None = None,
-    ):
-        """Log a security event (motion_detected, person_entered, person_left, unknown_face)."""
-        if not self._conn:
-            return
-        now = datetime.now()
-        self._conn.execute(
-            """INSERT INTO security_events
-               (timestamp, epoch, event_type, confidence, track_id, metadata)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                now.isoformat(),
-                time.time(),
-                event_type,
-                confidence,
-                track_id,
-                json.dumps(metadata) if metadata else None,
-            ),
-        )
-        self._conn.commit()
-        self._maybe_rotate()
+    def dequeue_batch(self, limit: int = 50) -> list[tuple[int, dict]]:
+        """Fetch the oldest pending events (FIFO order).
 
-    def query_recent(
-        self,
-        hours: float = 1.0,
-        person: str | None = None,
-        event_type: str | None = None,
-        limit: int = 100,
-    ) -> list[dict]:
-        """Query recent events across both tables."""
+        Returns list of (row_id, payload_dict) tuples.
+        """
         if not self._conn:
             return []
+        rows = self._conn.execute(
+            "SELECT id, payload FROM pending_events ORDER BY id ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        result = []
+        for row_id, payload_str in rows:
+            try:
+                result.append((row_id, json.loads(payload_str)))
+            except (json.JSONDecodeError, TypeError):
+                log.warning("Corrupt buffered event id=%d, skipping", row_id)
+                # Remove corrupt entry
+                self._conn.execute("DELETE FROM pending_events WHERE id = ?", (row_id,))
+        return result
 
-        cutoff = time.time() - hours * 3600
-        results = []
-
-        # Recognition events
-        q = "SELECT timestamp, person_name, recognition_type, confidence, track_id, metadata FROM recognition_events WHERE epoch >= ?"
-        params: list = [cutoff]
-        if person:
-            q += " AND person_name = ?"
-            params.append(person)
-        q += " ORDER BY epoch DESC LIMIT ?"
-        params.append(limit)
-
-        for row in self._conn.execute(q, params).fetchall():
-            results.append({
-                "table": "recognition",
-                "timestamp": row[0],
-                "person_name": row[1],
-                "recognition_type": row[2],
-                "confidence": row[3],
-                "track_id": row[4],
-                "metadata": json.loads(row[5]) if row[5] else None,
-            })
-
-        # Security events
-        q = "SELECT timestamp, event_type, confidence, track_id, metadata FROM security_events WHERE epoch >= ?"
-        params = [cutoff]
-        if event_type:
-            q += " AND event_type = ?"
-            params.append(event_type)
-        q += " ORDER BY epoch DESC LIMIT ?"
-        params.append(limit)
-
-        for row in self._conn.execute(q, params).fetchall():
-            results.append({
-                "table": "security",
-                "timestamp": row[0],
-                "event_type": row[1],
-                "confidence": row[2],
-                "track_id": row[3],
-                "metadata": json.loads(row[4]) if row[4] else None,
-            })
-
-        results.sort(key=lambda r: r["timestamp"], reverse=True)
-        return results[:limit]
-
-    def _rotate(self):
-        """Delete events older than retention period."""
-        if not self._conn:
+    def remove(self, ids: list[int]) -> None:
+        """Delete events by ID after successful send."""
+        if not self._conn or not ids:
             return
-        cutoff = (datetime.now() - timedelta(days=config.EVENT_RETENTION_DAYS)).isoformat()
-        r1 = self._conn.execute(
-            "DELETE FROM recognition_events WHERE timestamp < ?", (cutoff,)
-        )
-        r2 = self._conn.execute(
-            "DELETE FROM security_events WHERE timestamp < ?", (cutoff,)
+        placeholders = ",".join("?" * len(ids))
+        self._conn.execute(
+            f"DELETE FROM pending_events WHERE id IN ({placeholders})", ids
         )
         self._conn.commit()
-        total = r1.rowcount + r2.rowcount
-        if total > 0:
-            log.info("Rotated %d old events (>%d days)", total, config.EVENT_RETENTION_DAYS)
+
+    def count(self) -> int:
+        """Number of pending events in the buffer."""
+        if not self._conn:
+            return 0
+        row = self._conn.execute("SELECT COUNT(*) FROM pending_events").fetchone()
+        return row[0] if row else 0
 
     def close(self):
+        """Checkpoint WAL and close the database."""
         if self._conn:
             try:
                 self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -217,4 +110,4 @@ class EventStore:
                 log.debug("WAL checkpoint on close failed", exc_info=True)
             self._conn.close()
             self._conn = None
-            log.info("EventStore closed")
+            log.info("OfflineEventBuffer closed")

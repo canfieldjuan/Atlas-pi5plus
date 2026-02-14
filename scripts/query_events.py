@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Query the local event store.
+"""Query events from the Brain alerts API.
 
 Usage:
     python query_events.py --last 1h              # last hour
@@ -9,12 +9,15 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import sys
+import urllib.request
+import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from atlas_node.event_store import EventStore
+from atlas_node import config
 
 
 def parse_duration(s: str) -> float:
@@ -31,51 +34,72 @@ def parse_duration(s: str) -> float:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Query Atlas edge node event history")
+    parser = argparse.ArgumentParser(description="Query Atlas event history from Brain")
     parser.add_argument("--last", default="1h",
                         help="Time window (e.g. '1h', '24h', '7d', '30m')")
     parser.add_argument("--person", default=None,
                         help="Filter by person name")
     parser.add_argument("--type", default=None, dest="event_type",
-                        help="Filter security events by type (motion_detected, person_entered, person_left, unknown_face)")
+                        help="Filter by event type (motion_detected, person_entered, person_left, unknown_face)")
     parser.add_argument("--limit", type=int, default=100,
                         help="Max results (default: 100)")
-    parser.add_argument("--db", default=None,
-                        help="Path to events.db (default: from config)")
     args = parser.parse_args()
 
     hours = parse_duration(args.last)
+    since_minutes = int(hours * 60)
 
-    store = EventStore(db_path=args.db)
-    store.init()
+    params = {
+        "event_type": "security",
+        "node_id": config.NODE_ID,
+        "include_acknowledged": "true",
+        "since_minutes": str(since_minutes),
+        "limit": str(args.limit),
+    }
 
-    results = store.query_recent(
-        hours=hours,
-        person=args.person,
-        event_type=args.event_type,
-        limit=args.limit,
-    )
+    query_string = "&".join(f"{k}={v}" for k, v in params.items())
+    url = f"{config.BRAIN_API_BASE}/alerts?{query_string}"
 
-    if not results:
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.URLError as e:
+        print(f"Error: Cannot reach Brain API at {config.BRAIN_API_BASE}")
+        print(f"  {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    alerts = data.get("alerts", [])
+
+    # Client-side filters not supported by API
+    if args.event_type:
+        alerts = [a for a in alerts
+                  if (a.get("event_data") or {}).get("event") == args.event_type]
+    if args.person:
+        person_lower = args.person.lower()
+        alerts = [a for a in alerts
+                  if person_lower in (a.get("event_data") or {}).get("name", "").lower()]
+
+    if not alerts:
         print(f"No events found in the last {args.last}")
-        store.close()
         return
 
-    print(f"Found {len(results)} events in the last {args.last}:\n")
+    print(f"Found {len(alerts)} events in the last {args.last}:\n")
 
-    for r in results:
-        ts = r["timestamp"][:19]  # trim microseconds
-        if r["table"] == "recognition":
-            print(f"  [{ts}] RECOGNITION  {r['person_name']:<15s}  "
-                  f"type={r['recognition_type']:<10s}  "
-                  f"conf={r['confidence']:.3f}  "
-                  f"track={r.get('track_id', '-')}")
-        else:
-            print(f"  [{ts}] SECURITY     {r['event_type']:<20s}  "
-                  f"conf={r.get('confidence', 0):.3f}  "
-                  f"track={r.get('track_id', '-')}")
+    for a in alerts:
+        ed = a.get("event_data") or {}
+        ts = a.get("triggered_at", "")[:19]
+        event = ed.get("event", a.get("rule_name", "").replace("edge_security_", ""))
+        confidence = ed.get("confidence", ed.get("combined_confidence", 0))
+        name = ed.get("name", "")
+        track_id = ed.get("track_id", "-")
 
-    store.close()
+        print(f"  [{ts}] {event:<20s}  "
+              f"conf={confidence:.3f}  "
+              f"name={name or '-':<15s}  "
+              f"track={track_id}")
 
 
 if __name__ == "__main__":

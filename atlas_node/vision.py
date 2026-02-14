@@ -222,7 +222,7 @@ def _iou(box_a, box_b):
 class VisionPipeline:
     """Motion-gated vision pipeline with person tracking and identity fusion."""
 
-    def __init__(self, event_store=None):
+    def __init__(self):
         self._rknn_yolo = None
         self._rknn_clip = None
         self._text_embeds = None
@@ -231,7 +231,6 @@ class VisionPipeline:
         self._gait_rec = None
         self._track_mgr = TrackManager()
         self._motion_det = None
-        self._event_store = event_store
 
     def init(self):
         from rknnlite.api import RKNNLite
@@ -335,7 +334,6 @@ class VisionPipeline:
                 for t in deleted:
                     if self._gait_rec:
                         self._gait_rec.cleanup_track(t.track_id)
-                self._log_events(events)
                 return [], events
             elif not self._motion_det.in_cooldown():
                 events.append({
@@ -445,33 +443,7 @@ class VisionPipeline:
             if self._gait_rec:
                 self._gait_rec.cleanup_track(t.track_id)
 
-        # 9. Log events to store
-        self._log_events(events)
-
         return detections, events
-
-    def _log_events(self, events: list[dict]) -> None:
-        """Persist events to the local SQLite event store."""
-        if not self._event_store:
-            return
-        for evt in events:
-            etype = evt.get("event", "")
-            if etype == "person_entered":
-                rec_type = "face+gait" if evt.get("gait_confidence", 0) > 0 else "face"
-                self._event_store.log_recognition(
-                    person_name=evt.get("name", "unknown"),
-                    recognition_type=rec_type,
-                    confidence=evt.get("combined_confidence", 0),
-                    track_id=evt.get("track_id"),
-                )
-            elif etype in ("motion_detected", "person_left", "unknown_face"):
-                self._event_store.log_security(
-                    event_type=etype,
-                    confidence=evt.get("confidence", 0),
-                    track_id=evt.get("track_id"),
-                    metadata={k: v for k, v in evt.items()
-                              if k not in ("event", "confidence", "track_id")},
-                )
 
     def _match_pose_to_tracks(self, pose_boxes, pose_kpts, confirmed_tracks):
         """Match pose detections to confirmed person tracks via IoU, accumulate keypoints."""

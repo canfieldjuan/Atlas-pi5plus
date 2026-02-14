@@ -15,7 +15,7 @@ from .config import (
     LOCAL_LLM_ENABLED, LLM_ROUTE, TTS_QUEUE_MAXSIZE,
 )
 from .dashboard import DashboardServer
-from .event_store import EventStore
+from .event_store import OfflineEventBuffer
 from .identity_sync import IdentitySyncManager
 from .sentence_buffer import SentenceBuffer
 from .startup_display import StartupDisplay
@@ -39,19 +39,19 @@ async def main():
 
     ws = AtlasWSClient()
 
-    display.update("Event Store", "init")
-    event_store = EventStore()
+    display.update("Offline Buffer", "init")
+    offline_buffer = OfflineEventBuffer()
     try:
-        event_store.init()
-        log.info("EventStore ready")
-        display.update("Event Store", "ok")
+        offline_buffer.init()
+        ws.set_offline_buffer(offline_buffer)
+        display.update("Offline Buffer", "ok")
     except Exception:
-        log.exception("EventStore init failed -- running without event logging")
-        display.update("Event Store", "fail")
-        event_store = None
+        log.exception("OfflineEventBuffer init failed -- critical events won't survive outages")
+        display.update("Offline Buffer", "fail")
+        offline_buffer = None
 
-    vision = VisionPipeline(event_store=event_store)
-    speech = SpeechPipeline(event_store=event_store)
+    vision = VisionPipeline()
+    speech = SpeechPipeline()
 
     # Local LLM (Phi-3 via llama-server)
     local_llm = None
@@ -103,7 +103,7 @@ async def main():
     # Dashboard server (local web UI)
     dashboard = None
     if DASHBOARD_ENABLED:
-        dashboard = DashboardServer(event_store, ws, vision)
+        dashboard = DashboardServer(ws_client=ws, vision_pipeline=vision)
         log.info("Dashboard enabled")
         display.update("Dashboard", "ok")
     else:
@@ -174,6 +174,7 @@ async def main():
     ws.add_handler("vision_ack", _noop)
     ws.add_handler("health_ack", _noop)
     ws.add_handler("security_ack", _noop)
+    ws.add_handler("recognition_ack", _noop)
 
     async def _tts_worker():
         """Drain TTS queue and speak sentences sequentially.
@@ -245,8 +246,8 @@ async def main():
             speech.release()
         if local_llm:
             await local_llm.stop()
-        if event_store:
-            event_store.close()
+        if offline_buffer:
+            offline_buffer.close()
         log.info("Atlas Edge Node stopped")
 
 

@@ -23,7 +23,7 @@ SENSEVOICE_MODEL_DIR = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
 class SpeechPipeline:
     """Microphone capture + VAD + SenseVoice STT via sherpa-onnx."""
 
-    def __init__(self, event_store=None):
+    def __init__(self):
         self._recognizer = None
         self._vad = None
         self._audio_stream = None
@@ -34,7 +34,6 @@ class SpeechPipeline:
         self._wakeword_model = None
         self._ws_client = None
         self._local_llm = None
-        self._event_store = event_store
 
     def _find_device_by_name(self, name: str):
         """Find PyAudio input device index by name substring."""
@@ -412,15 +411,17 @@ class SpeechPipeline:
             except Exception:
                 log.exception("Speaker ID error")
 
-        if speaker_name and self._event_store:
+        if speaker_name:
             try:
-                self._event_store.log_recognition(
-                    person_name=speaker_name,
-                    recognition_type="speaker",
-                    confidence=speaker_conf,
-                )
+                await on_transcript({
+                    "type": "recognition",
+                    "person_name": speaker_name,
+                    "recognition_type": "speaker",
+                    "confidence": round(speaker_conf, 3),
+                    "camera_source": "mic1",
+                })
             except Exception:
-                log.exception("Failed to log speaker event")
+                log.exception("Failed to send speaker recognition event")
 
         if not text:
             return
