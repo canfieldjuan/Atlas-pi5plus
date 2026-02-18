@@ -70,7 +70,7 @@ FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.30"))
 FACE_DET_CONF_THRESHOLD = float(os.getenv("FACE_DET_CONF_THRESHOLD", "0.5"))
 FACE_DET_NMS_THRESHOLD = float(os.getenv("FACE_DET_NMS_THRESHOLD", "0.4"))
 FACE_COOLDOWN_SECONDS = float(os.getenv("FACE_COOLDOWN_SECONDS", "5.0"))
-FACE_AUTO_ENROLL = os.getenv("FACE_AUTO_ENROLL", "true").lower() in ("true", "1", "yes")
+FACE_AUTO_ENROLL = os.getenv("FACE_AUTO_ENROLL", "false").lower() in ("true", "1", "yes")
 FACE_UNKNOWN_DIR = os.getenv("FACE_UNKNOWN_DIR", str(BASE_DIR / "face_unknown"))
 
 # --- Speaker Identification ---
