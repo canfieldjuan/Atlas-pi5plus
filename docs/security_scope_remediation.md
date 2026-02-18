@@ -11,7 +11,7 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 
 | ID | Severity | Status | Issue | Evidence | Target Files |
 |----|----------|--------|-------|----------|--------------|
-| SEC-001 | High | Open | Dashboard and stream surfaces are exposed without auth and broad bind/CORS | `atlas_node/config.py:134`, `atlas_node/dashboard.py:170`, `/opt/mediamtx/mediamtx.yml:20` | `atlas_node/config.py`, `atlas_node/dashboard.py`, `/opt/mediamtx/mediamtx.yml` |
+| SEC-001 | High | In Progress | Dashboard and stream surfaces are exposed without auth and broad bind/CORS | `atlas_node/config.py:134`, `atlas_node/dashboard.py:170`, `/opt/mediamtx/mediamtx.yml:20` | `atlas_node/config.py`, `atlas_node/dashboard.py`, `/opt/mediamtx/mediamtx.yml`, `web/dashboard.html` |
 | SEC-002 | High | Closed | Person-triggered stream starts but is not explicitly released, causing long-running recording/streaming | `atlas_node/vision.py:575`, `atlas_node/stream_manager.py:57`, `atlas_node/vision.py:549` | `atlas_node/vision.py`, `atlas_node/stream_manager.py` |
 | SEC-003 | High | Closed | Brain sends `escalation_alert` but edge node has no handler | Brain: `atlas_brain/escalation/evaluator.py:227`; Edge handlers: `atlas_node/main.py:194-203` | `atlas_node/main.py` |
 | SEC-004 | Medium | Open | General assistant scope (time/timer/math/chat) exceeds strict security-node mission | `atlas_node/skills/__init__.py:26-30`, `atlas_node/local_llm.py:19` | `atlas_node/skills/__init__.py`, `atlas_node/config.py`, `atlas_node/speech.py` |
@@ -27,9 +27,11 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 
 ## Current Work Item
 
-- Next: `SEC-001` (lock down dashboard/media exposure and auth surface)
+- Continue: `SEC-001` (MediaMTX exposure controls + runtime token enablement)
 
 ## Remediation Log
 
 - 2026-02-17: SEC-003 closed. Edge now handles Brain escalation_alert messages in atlas_node/main.py.
 - 2026-02-17: SEC-002 closed. Stream idle logic now uses last person detection request time to auto-release person_detect stream when detections stop.
+- 2026-02-17: SEC-001 partial. Added optional dashboard token auth and configurable CORS origin; dashboard frontend now forwards token query param to API/WS endpoints.
+- 2026-02-17: SEC-001 runtime hardening enabled on this node. DASHBOARD_API_TOKEN was set in .env.local and validated with 401 (no token) / 200 (token) on /api/status.

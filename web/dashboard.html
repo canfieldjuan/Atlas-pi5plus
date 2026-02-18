@@ -278,8 +278,15 @@
 
 <script>
 const EDGE_HOST = location.hostname || '100.95.224.113';
-const WS_URL = `ws://${location.host}/ws/live`;
+const URL_PARAMS = new URLSearchParams(location.search);
+const DASH_TOKEN = URL_PARAMS.get('token') || '';
+const WS_URL = `ws://${location.host}/ws/live${DASH_TOKEN ? `?token=${encodeURIComponent(DASH_TOKEN)}` : ''}`;
 const WHEP_URL = `http://${EDGE_HOST}:8889/cam1/whep`;
+
+function withToken(url) {
+  if (!DASH_TOKEN) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(DASH_TOKEN)}`;
+}
 
 // --- Utilities ---
 
@@ -507,7 +514,7 @@ const statBrain = document.getElementById('stat-brain');
 
 async function fetchStatus() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch(withToken('/api/status'));
     if (!res.ok) return;
     const s = await res.json();
     statTracks.textContent = s.active_tracks;
@@ -520,7 +527,7 @@ async function fetchStatus() {
 
 async function fetchEvents() {
   try {
-    const res = await fetch('/api/events?hours=24&limit=50');
+    const res = await fetch(withToken('/api/events?hours=24&limit=50'));
     if (!res.ok) return;
     events = await res.json();
     renderEvents();

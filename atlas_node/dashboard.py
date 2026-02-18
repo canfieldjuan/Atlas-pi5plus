@@ -54,13 +54,46 @@ class DashboardServer:
 
     # --- HTTP handlers ---
 
+    def _is_authorized(self, request: web.Request) -> bool:
+        """Check optional dashboard token auth.
+
+        Auth is disabled when DASHBOARD_API_TOKEN is empty.
+        When enabled, accepts either:
+          - query param: ?token=<value>
+          - header: Authorization: Bearer <value>
+        """
+        token = config.DASHBOARD_API_TOKEN
+        if not token:
+            return True
+
+        query_token = request.query.get("token", "")
+        if query_token == token:
+            return True
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer ") and auth_header[7:] == token:
+            return True
+
+        return False
+
+    def _unauthorized_response(self) -> web.Response:
+        return web.Response(
+            status=401,
+            text="unauthorized",
+            headers=self._cors_headers(),
+        )
+
     async def _handle_index(self, request: web.Request) -> web.Response:
+        if not self._is_authorized(request):
+            return self._unauthorized_response()
         html_path = WEB_DIR / "dashboard.html"
         if not html_path.exists():
             return web.Response(text="dashboard.html not found", status=404)
         return web.FileResponse(html_path)
 
     async def _handle_events(self, request: web.Request) -> web.Response:
+        if not self._is_authorized(request):
+            return self._unauthorized_response()
         hours = float(request.query.get("hours", "24"))
         limit = int(request.query.get("limit", "50"))
 
@@ -108,6 +141,8 @@ class DashboardServer:
         return events
 
     async def _handle_status(self, request: web.Request) -> web.Response:
+        if not self._is_authorized(request):
+            return self._unauthorized_response()
         active_tracks = 0
         motion_active = False
         vision_fps = config.VISION_FPS
@@ -141,6 +176,8 @@ class DashboardServer:
         return web.json_response(status, headers=self._cors_headers())
 
     async def _handle_faces(self, request: web.Request) -> web.Response:
+        if not self._is_authorized(request):
+            return self._unauthorized_response()
         face_dir = Path(config.FACE_DB_DIR)
         names = []
         if face_dir.exists():
@@ -148,6 +185,8 @@ class DashboardServer:
         return web.json_response(names, headers=self._cors_headers())
 
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
+        if not self._is_authorized(request):
+            raise web.HTTPUnauthorized(headers=self._cors_headers())
         ws = web.WebSocketResponse()
         await ws.prepare(request)
         self._clients.add(ws)
@@ -167,9 +206,9 @@ class DashboardServer:
     @staticmethod
     def _cors_headers() -> dict[str, str]:
         return {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": config.DASHBOARD_ALLOWED_ORIGIN,
             "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
         }
 
     async def _handle_options(self, request: web.Request) -> web.Response:
