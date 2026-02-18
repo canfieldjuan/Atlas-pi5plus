@@ -21,6 +21,7 @@ class StreamManager:
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._requesters: set[str] = set()
+        self._last_request_time: dict[str, float] = {}
         self._last_frame_time = 0.0
         self._started = False
 
@@ -31,6 +32,7 @@ class StreamManager:
     def request_stream(self, requester: str) -> None:
         """Register a requester. Starts FFmpeg if not already running."""
         with self._lock:
+            self._last_request_time[requester] = time.monotonic()
             self._requesters.add(requester)
             if not self.is_streaming:
                 self._start_ffmpeg()
@@ -39,6 +41,7 @@ class StreamManager:
         """Unregister a requester. Stops FFmpeg if no requesters remain."""
         with self._lock:
             self._requesters.discard(requester)
+            self._last_request_time.pop(requester, None)
             if not self._requesters and self.is_streaming:
                 self._stop_ffmpeg()
 
@@ -55,16 +58,21 @@ class StreamManager:
                 self._stop_ffmpeg()
 
     def check_idle(self) -> None:
-        """Stop stream if idle too long (no frames written)."""
+        """Stop stream if person-detection requester has gone idle."""
         if not self.is_streaming or not self._requesters:
             return
         # Only auto-stop "person_detect" requester; camera_skill is explicit
         if self._requesters == {"person_detect"}:
-            idle = time.monotonic() - self._last_frame_time
+            last_seen = self._last_request_time.get(
+                "person_detect",
+                self._last_frame_time,
+            )
+            idle = time.monotonic() - last_seen
             if idle > config.STREAM_IDLE_TIMEOUT:
                 log.info("Stream idle %.0fs, stopping", idle)
                 with self._lock:
                     self._requesters.discard("person_detect")
+                    self._last_request_time.pop("person_detect", None)
                     if not self._requesters:
                         self._stop_ffmpeg()
 
@@ -119,4 +127,5 @@ class StreamManager:
     def shutdown(self):
         with self._lock:
             self._requesters.clear()
+            self._last_request_time.clear()
             self._stop_ffmpeg()
