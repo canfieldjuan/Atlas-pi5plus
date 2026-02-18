@@ -1,0 +1,50 @@
+###############################################
+# MediaMTX configuration for Atlas Edge Node
+# Managed from Atlas-pi5plus source of truth
+###############################################
+
+# --- Global settings ---
+logLevel: info
+logDestinations: [stdout]
+
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+
+# --- API (for health checks) ---
+api: yes
+apiAddress: 127.0.0.1:9997
+
+# --- RTSP server ---
+rtsp: yes
+rtspAddress: 127.0.0.1:8554
+rtspTransports: [tcp, udp]
+
+# --- WebRTC server ---
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcICEServers2: []
+
+# --- HLS server ---
+hls: yes
+hlsAddress: 127.0.0.1:8888
+hlsAlwaysRemux: no
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsAllowOrigins: ['*']
+
+# --- Path defaults ---
+pathDefaults:
+  record: yes
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S
+  recordFormat: fmp4
+  recordSegmentDuration: 5m
+  recordDeleteAfter: ${MEDIAMTX_RECORD_DELETE_AFTER}
+
+# --- Paths ---
+paths:
+  cam1:
+    source: publisher

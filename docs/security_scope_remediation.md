@@ -16,7 +16,7 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 | SEC-003 | High | Closed | Brain sends `escalation_alert` but edge node has no handler | Brain: `atlas_brain/escalation/evaluator.py:227`; Edge handlers: `atlas_node/main.py:194-203` | `atlas_node/main.py` |
 | SEC-004 | Medium | Closed | General assistant scope (time/timer/math/chat) exceeds strict security-node mission | `atlas_node/skills/__init__.py:26-30`, `atlas_node/local_llm.py:19` | `atlas_node/skills/__init__.py`, `atlas_node/config.py`, `atlas_node/speech.py` |
 | SEC-005 | Medium | Closed | Unknown face auto-enrollment defaults on, increasing identity noise/privacy risk | `atlas_node/config.py:73`, `atlas_node/face.py:347` | `atlas_node/config.py`, `atlas_node/face.py` |
-| SEC-006 | Medium | Open | Recording footprint growth needs policy guardrails and controls | `/opt/mediamtx/mediamtx.yml:41-45`, recordings footprint observed | `/opt/mediamtx/mediamtx.yml`, ops policy docs |
+| SEC-006 | Medium | Closed | Recording footprint growth needs policy guardrails and controls | `ops/mediamtx/mediamtx.yml.tmpl:45`, `scripts/sync_mediamtx_config.sh:8`, runtime `/opt/mediamtx/mediamtx.yml:45` | `ops/mediamtx/mediamtx.yml.tmpl`, `scripts/sync_mediamtx_config.sh`, `docs/source_of_truth.md` |
 
 ## Execution Rules
 
@@ -38,3 +38,4 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 - 2026-02-17: SEC-001 partial. MediaMTX API/RTSP/HLS listeners moved to loopback (`127.0.0.1`) and runtime-validated after container restart; WebRTC remains exposed on :8889 for operator dashboard viewing.
 - 2026-02-17: SEC-005 closed. FACE_AUTO_ENROLL default changed from true to false; unknown-face auto-enrollment now requires explicit opt-in via environment config.
 - 2026-02-17: SEC-004 closed. Non-security local skills (time/timer/math) are now opt-in via env flags and disabled by default; local LLM is also disabled by default to keep node behavior security-focused.
+- 2026-02-17: SEC-006 closed. Added repo-managed MediaMTX template and sync script with configurable `MEDIAMTX_RECORD_DELETE_AFTER` (set to `72h` on-node); this establishes retention guardrails under source control.

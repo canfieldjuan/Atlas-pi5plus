@@ -8,6 +8,8 @@ This document defines the single source of truth for the Orange Pi node runtime.
 - Canonical branch: `main`
 - Canonical runtime checkout path on node: `/opt/atlas-node`
 - Canonical systemd service: `atlas-node.service`
+- Canonical MediaMTX template: `ops/mediamtx/mediamtx.yml.tmpl`
+- Canonical MediaMTX apply script: `scripts/sync_mediamtx_config.sh`
 
 If code is not committed to `Atlas-pi5plus/main`, it is not considered durable node truth.
 
@@ -15,6 +17,7 @@ If code is not committed to `Atlas-pi5plus/main`, it is not considered durable n
 
 - Repo truth: tracked files committed in `Atlas-pi5plus/main`
 - Runtime config truth: `/opt/atlas-node/.env.local` (deployment-specific, git-ignored)
+- Runtime MediaMTX config: `/opt/mediamtx/mediamtx.yml` (rendered from repo template)
 - Deployment unit truth: `/etc/systemd/system/atlas-node.service`
 
 This means `/home/juan-canfield/Desktop/Atlas` can be a development input, but it is not the node source of truth unless changes are ported and committed to `Atlas-pi5plus`.
@@ -24,6 +27,7 @@ This means `/home/juan-canfield/Desktop/Atlas` can be a development input, but i
 - `atlas-node.service` must execute from `/opt/atlas-node`
 - `/opt/atlas-node` must be on a committed SHA from `origin/main`
 - `/opt/atlas-node` working tree must be clean during normal operation
+- MediaMTX runtime config must be generated from `ops/mediamtx/mediamtx.yml.tmpl`
 - All production changes must be represented by commits in GitHub
 
 ## Change Workflow (Required)
@@ -33,7 +37,8 @@ This means `/home/juan-canfield/Desktop/Atlas` can be a development input, but i
 3. Commit focused changes with clear messages.
 4. Push to `origin/main`.
 5. Restart `atlas-node.service` if runtime code/config changed.
-6. Verify health (`systemctl status`, recent `journalctl` logs, WS connection, expected handlers).
+6. If MediaMTX template changed, run `scripts/sync_mediamtx_config.sh`.
+7. Verify health (`systemctl status`, recent `journalctl` logs, WS connection, expected handlers).
 
 ## Hotfix Workflow (Allowed, but must be reconciled)
 
@@ -57,6 +62,7 @@ git status --short
 git rev-parse HEAD
 git rev-parse origin/main
 systemctl is-active atlas-node
+grep -n "recordDeleteAfter" /opt/mediamtx/mediamtx.yml
 ```
 
 Expected:
@@ -64,6 +70,7 @@ Expected:
 - `git status --short` prints nothing
 - `HEAD` matches `origin/main`
 - service is `active`
+- MediaMTX retention matches intended policy
 
 ## Current Decision (2026-02-17)
 
