@@ -32,9 +32,9 @@ CLIP_TEXT_MODEL_PATH = os.getenv(
     str(MODEL_DIR / "yolo-world" / "clip_text_fp32.rknn"),
 )
 CAMERA_DEVICE = int(os.getenv("CAMERA_DEVICE", "0"))
-CAMERA_WIDTH = int(os.getenv("CAMERA_WIDTH", "640"))
-CAMERA_HEIGHT = int(os.getenv("CAMERA_HEIGHT", "480"))
-RTSP_STREAM_URL = os.getenv("RTSP_STREAM_URL", "rtsp://localhost:8554/cam1")
+CAMERA_WIDTH = int(os.getenv("CAMERA_WIDTH", "1280"))
+CAMERA_HEIGHT = int(os.getenv("CAMERA_HEIGHT", "720"))
+RTSP_STREAM_URL = os.getenv("RTSP_STREAM_URL", "")  # empty = direct /dev/video0
 VISION_FPS = float(os.getenv("VISION_FPS", "5"))
 YOLO_CONF_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.25"))
 YOLO_NMS_THRESHOLD = float(os.getenv("YOLO_NMS_THRESHOLD", "0.45"))
@@ -66,7 +66,7 @@ FACE_REC_MODEL_PATH = os.getenv(
     str(MODEL_DIR / "face" / "w600k_mbf_i8.rknn"),
 )
 FACE_DB_DIR = os.getenv("FACE_DB_DIR", str(BASE_DIR / "face_db"))
-FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.40"))
+FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.30"))
 FACE_DET_CONF_THRESHOLD = float(os.getenv("FACE_DET_CONF_THRESHOLD", "0.5"))
 FACE_DET_NMS_THRESHOLD = float(os.getenv("FACE_DET_NMS_THRESHOLD", "0.4"))
 FACE_COOLDOWN_SECONDS = float(os.getenv("FACE_COOLDOWN_SECONDS", "5.0"))
@@ -111,6 +111,13 @@ MOTION_COOLDOWN_SECONDS = float(os.getenv("MOTION_COOLDOWN_SECONDS", "10.0"))
 MOTION_LEARNING_RATE = float(os.getenv("MOTION_LEARNING_RATE", "0.005"))
 MOTION_WARMUP_FRAMES = int(os.getenv("MOTION_WARMUP_FRAMES", "30"))
 
+# --- On-demand RTSP streaming ---
+STREAM_RTSP_PUBLISH_URL = os.getenv("STREAM_RTSP_PUBLISH_URL", "rtsp://localhost:8554/cam1")
+STREAM_FPS = int(os.getenv("STREAM_FPS", "15"))
+STREAM_BITRATE = os.getenv("STREAM_BITRATE", "2000k")
+STREAM_IDLE_TIMEOUT = float(os.getenv("STREAM_IDLE_TIMEOUT", "60"))
+STREAM_ON_PERSON = os.getenv("STREAM_ON_PERSON", "true").lower() in ("true", "1", "yes")
+
 # --- Offline Event Buffer ---
 OFFLINE_BUFFER_DB_PATH = os.getenv("OFFLINE_BUFFER_DB_PATH", str(BASE_DIR / "data" / "offline_buffer.db"))
 OFFLINE_BUFFER_RETENTION_DAYS = int(os.getenv("OFFLINE_BUFFER_RETENTION_DAYS", "7"))
@@ -142,10 +149,20 @@ WAKEWORD_LISTEN_SECONDS = float(os.getenv("WAKEWORD_LISTEN_SECONDS", "10.0"))
 WAKEWORD_PREBUFFER_FRAMES = int(os.getenv("WAKEWORD_PREBUFFER_FRAMES", "10"))
 
 # --- TTS ---
-TTS_ENGINE = os.getenv("TTS_ENGINE", "piper")  # "piper" or "kokoro"
+TTS_ENGINE = os.getenv("TTS_ENGINE", "matcha")  # "piper", "kokoro", or "matcha"
 STREAMING_TTS_ENABLED = os.getenv("STREAMING_TTS_ENABLED", "true").lower() in ("true", "1", "yes")
 TTS_QUEUE_MAXSIZE = int(os.getenv("TTS_QUEUE_MAXSIZE", "16"))
 TTS_APLAY_TIMEOUT = int(os.getenv("TTS_APLAY_TIMEOUT", "60"))
+
+# --- Matcha-TTS ---
+MATCHA_MODEL_DIR = os.getenv("MATCHA_MODEL_DIR", str(MODEL_DIR / "tts" / "matcha-en"))
+MATCHA_ACOUSTIC_MODEL = os.getenv("MATCHA_ACOUSTIC_MODEL", "model-steps-3.onnx")
+MATCHA_VOCODER = os.getenv("MATCHA_VOCODER", "vocos-22khz-univ.onnx")
+MATCHA_TOKENS = os.getenv("MATCHA_TOKENS", "tokens.txt")
+MATCHA_DATA_DIR = os.getenv("MATCHA_DATA_DIR", "espeak-ng-data")
+MATCHA_NUM_THREADS = int(os.getenv("MATCHA_NUM_THREADS", "4"))
+MATCHA_NOISE_SCALE = float(os.getenv("MATCHA_NOISE_SCALE", "1.0"))
+MATCHA_LENGTH_SCALE = float(os.getenv("MATCHA_LENGTH_SCALE", "1.0"))
 
 # --- Local Skills ---
 SKILLS_TIMEZONE = os.getenv("SKILLS_TIMEZONE", "America/Chicago")
@@ -153,7 +170,7 @@ SKILLS_MAX_TIMERS = int(os.getenv("SKILLS_MAX_TIMERS", "10"))
 
 # --- Camera Skill ---
 CAMERA_DEFAULT_MONITOR = int(os.getenv("CAMERA_DEFAULT_MONITOR", "1"))
-CAMERA_MONITOR_MAP = os.getenv("CAMERA_MONITOR_MAP", "1=HDMI-1,2=HDMI-2")
+CAMERA_MONITOR_MAP = os.getenv("CAMERA_MONITOR_MAP", "1=HDMI-2")
 CAMERA_MPV_IPC_DIR = os.getenv("CAMERA_MPV_IPC_DIR", "/tmp/atlas-mpv")
 
 # --- Local LLM (Phi-3 via llama-server) ---

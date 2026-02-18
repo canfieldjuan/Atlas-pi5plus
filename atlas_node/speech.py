@@ -323,6 +323,7 @@ class SpeechPipeline:
         listening_for_wake = wakeword_active
         listen_deadline = 0.0
         pre_buffer = deque(maxlen=config.WAKEWORD_PREBUFFER_FRAMES) if wakeword_active else None
+        _was_speaking = False
 
         while True:
             try:
@@ -333,7 +334,15 @@ class SpeechPipeline:
 
                 # Suppress while TTS is playing to avoid echo feedback
                 if self._tts and self._tts.is_speaking.is_set():
+                    _was_speaking = True
                     continue
+
+                # Reset wake word model after TTS stops to prevent false triggers
+                if _was_speaking:
+                    _was_speaking = False
+                    if wakeword_active and listening_for_wake:
+                        self._wakeword_model.reset()
+                    continue  # drop first frame after TTS (may contain tail audio)
 
                 # Convert int16 to float32 (needed for both pre-buffer and VAD)
                 samples = audio_int16.astype(np.float32) / 32768.0

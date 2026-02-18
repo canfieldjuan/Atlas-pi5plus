@@ -231,6 +231,10 @@ class VisionPipeline:
         self._gait_rec = None
         self._track_mgr = TrackManager()
         self._motion_det = None
+        self._stream_mgr = None  # set by main.py
+
+    def set_stream_manager(self, mgr):
+        self._stream_mgr = mgr
 
     def init(self):
         from rknnlite.api import RKNNLite
@@ -280,7 +284,17 @@ class VisionPipeline:
             self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
             if not self._cap.isOpened():
                 raise RuntimeError(f"Cannot open camera /dev/video{config.CAMERA_DEVICE}")
-            log.info("Video source: /dev/video%d (direct)", config.CAMERA_DEVICE)
+            # Lock exposure + white balance for consistent face embeddings
+            import subprocess as _sp
+            _sp.run([
+                "v4l2-ctl", "-d", f"/dev/video{config.CAMERA_DEVICE}",
+                "--set-ctrl=auto_exposure=1",
+                "--set-ctrl=exposure_time_absolute=300",
+                "--set-ctrl=white_balance_automatic=0",
+                "--set-ctrl=white_balance_temperature=4600",
+                "--set-ctrl=exposure_dynamic_framerate=0",
+            ], capture_output=True)
+            log.info("Video source: /dev/video%d (direct, fixed exposure)", config.CAMERA_DEVICE)
 
         # Initialize motion detector
         if config.MOTION_ENABLED:
@@ -529,6 +543,12 @@ class VisionPipeline:
                 continue
 
             consecutive_failures = 0
+
+            # Write frame to RTSP stream if active
+            if self._stream_mgr:
+                self._stream_mgr.write_frame(frame.tobytes())
+                self._stream_mgr.check_idle()
+
             detections, events = await loop.run_in_executor(
                 None, self._infer_frame, frame
             )
@@ -547,6 +567,12 @@ class VisionPipeline:
                     "type": "security",
                     **evt,
                 })
+
+            # Auto-start stream when person detected (for recording)
+            if self._stream_mgr and config.STREAM_ON_PERSON:
+                has_person = any(d["label"] == "person" for d in detections)
+                if has_person:
+                    self._stream_mgr.request_stream("person_detect")
 
             elapsed = time.monotonic() - t0
             if elapsed < interval:

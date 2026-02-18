@@ -36,12 +36,32 @@ def grab_frame_rtsp(url: str):
     return frame
 
 
+def grab_frame_device(device: int = 0, width: int = 1280, height: int = 720):
+    """Capture a single frame directly from /dev/videoN."""
+    cap = cv2.VideoCapture(device)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    if not cap.isOpened():
+        print(f"ERROR: Cannot open /dev/video{device}")
+        sys.exit(1)
+    # Read a few frames to let auto-exposure settle
+    for _ in range(10):
+        ret, frame = cap.read()
+    cap.release()
+    if not ret or frame is None:
+        print("ERROR: Failed to capture frame from camera")
+        sys.exit(1)
+    return frame
+
+
 def main():
     parser = argparse.ArgumentParser(description="Register a face for recognition")
     parser.add_argument("name", help="Identity name (e.g. 'alice')")
     parser.add_argument("--image", help="Path to image file (default: capture from RTSP)")
-    parser.add_argument("--rtsp-url", default="rtsp://localhost:8554/cam1",
-                        help="RTSP stream URL (default: rtsp://localhost:8554/cam1)")
+    parser.add_argument("--rtsp-url", default="",
+                        help="RTSP stream URL (default: use /dev/video0 directly)")
+    parser.add_argument("--device", type=int, default=0,
+                        help="Camera device index (default: 0 = /dev/video0)")
     parser.add_argument("--face-db", default="/opt/atlas-node/face_db",
                         help="Face database directory")
     parser.add_argument("--det-model", default="/opt/atlas-node/models/face/RetinaFace_mobile320.rknn",
@@ -57,9 +77,13 @@ def main():
             print(f"ERROR: Cannot read image: {args.image}")
             sys.exit(1)
         print(f"Loaded image: {args.image} ({frame.shape[1]}x{frame.shape[0]})")
-    else:
+    elif args.rtsp_url:
         print(f"Capturing from RTSP stream: {args.rtsp_url}")
         frame = grab_frame_rtsp(args.rtsp_url)
+        print(f"Captured frame: {frame.shape[1]}x{frame.shape[0]}")
+    else:
+        print(f"Capturing from /dev/video{args.device}...")
+        frame = grab_frame_device(args.device)
         print(f"Captured frame: {frame.shape[1]}x{frame.shape[0]}")
 
     # Import and initialize face recognizer (uses NPU)

@@ -82,12 +82,18 @@ class CameraSkill:
         self._monitor_map = _parse_monitor_map(config.CAMERA_MONITOR_MAP)
         self._default_monitor = config.CAMERA_DEFAULT_MONITOR
         self._ipc_dir = Path(config.CAMERA_MPV_IPC_DIR)
+        self._stream_mgr = None  # set by main.py
+
+    def set_stream_manager(self, mgr):
+        self._stream_mgr = mgr
 
     def shutdown(self) -> None:
         """Kill all active MPV processes."""
         for inst in list(self._active.values()):
             self._kill_mpv(inst)
         self._active.clear()
+        if self._stream_mgr:
+            self._stream_mgr.release_stream("camera_skill")
 
     async def execute(self, query: str, match: re.Match) -> SkillResult:
         self._reap_dead()
@@ -134,8 +140,13 @@ class CameraSkill:
             self._kill_mpv(existing)
             del self._active[cam_name]
 
+        if self._stream_mgr:
+            self._stream_mgr.request_stream("camera_skill")
+
         proc = self._launch_mpv(cam_name, monitor, screen_name)
         if proc is None:
+            if self._stream_mgr:
+                self._stream_mgr.release_stream("camera_skill")
             return SkillResult(
                 success=False,
                 response_text="Failed to launch camera display.",
@@ -159,6 +170,8 @@ class CameraSkill:
         for inst in list(self._active.values()):
             self._kill_mpv(inst)
         self._active.clear()
+        if self._stream_mgr:
+            self._stream_mgr.release_stream("camera_skill")
 
         return SkillResult(
             success=True,
@@ -240,7 +253,7 @@ class CameraSkill:
     # ------------------------------------------------------------------
 
     def _launch_mpv(self, cam_name: str, monitor: int, screen_name: str) -> Optional[subprocess.Popen]:
-        rtsp_url = config.RTSP_STREAM_URL
+        rtsp_url = config.STREAM_RTSP_PUBLISH_URL
 
         # Ensure IPC directory exists
         self._ipc_dir.mkdir(parents=True, exist_ok=True)
