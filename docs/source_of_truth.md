@@ -29,6 +29,7 @@ This means `/home/juan-canfield/Desktop/Atlas` can be a development input, but i
 - `/opt/atlas-node` working tree must be clean during normal operation
 - MediaMTX runtime config must be generated from `ops/mediamtx/mediamtx.yml.tmpl`
 - All production changes must be represented by commits in GitHub
+- MediaMTX `cam1` read access must require explicit credentials (`authMethod: internal` with non-anonymous read user)
 
 ## Change Workflow (Required)
 
@@ -63,6 +64,7 @@ git rev-parse HEAD
 git rev-parse origin/main
 systemctl is-active atlas-node
 grep -n "recordDeleteAfter" /opt/mediamtx/mediamtx.yml
+grep -n "authMethod\|authInternalUsers" /opt/mediamtx/mediamtx.yml
 ```
 
 Expected:
@@ -70,6 +72,7 @@ Expected:
 - `git status --short` prints nothing
 - `HEAD` matches `origin/main`
 - service is `active`
+- MediaMTX auth remains enabled for stream reads
 - MediaMTX retention matches intended policy
 
 ## Current Decision (2026-02-17)

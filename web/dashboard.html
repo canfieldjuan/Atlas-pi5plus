@@ -282,10 +282,19 @@ const URL_PARAMS = new URLSearchParams(location.search);
 const DASH_TOKEN = URL_PARAMS.get('token') || '';
 const WS_URL = `ws://${location.host}/ws/live${DASH_TOKEN ? `?token=${encodeURIComponent(DASH_TOKEN)}` : ''}`;
 const WHEP_URL = `http://${EDGE_HOST}:8889/cam1/whep`;
+const STREAM_USER = URL_PARAMS.get('stream_user') || 'atlas';
 
 function withToken(url) {
   if (!DASH_TOKEN) return url;
   return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(DASH_TOKEN)}`;
+}
+
+function buildWhepHeaders() {
+  const headers = { 'Content-Type': 'application/sdp' };
+  if (!DASH_TOKEN) return headers;
+  const basic = btoa(`${STREAM_USER}:${DASH_TOKEN}`);
+  headers['Authorization'] = `Basic ${basic}`;
+  return headers;
 }
 
 // --- Utilities ---
@@ -356,7 +365,7 @@ async function startWebRTC() {
     await pc.setLocalDescription(offer);
     const res = await fetch(WHEP_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
+      headers: buildWhepHeaders(),
       body: pc.localDescription.sdp,
     });
     if (!res.ok) throw new Error('WHEP ' + res.status);

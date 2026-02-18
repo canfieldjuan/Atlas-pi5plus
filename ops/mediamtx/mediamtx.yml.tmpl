@@ -11,6 +11,27 @@ readTimeout: 10s
 writeTimeout: 10s
 writeQueueSize: 512
 
+# --- Authentication ---
+authMethod: internal
+authInternalUsers:
+  # Local node services only (publisher + local control API)
+  - user: any
+    pass:
+    ips: ['127.0.0.1', '::1']
+    permissions:
+      - action: publish
+        path: cam1
+      - action: api
+      - action: metrics
+      - action: pprof
+
+  # Dashboard reader credentials for remote WebRTC/HLS clients
+  - user: ${MEDIAMTX_READ_USER}
+    pass: ${MEDIAMTX_READ_PASS}
+    permissions:
+      - action: read
+        path: cam1
+
 # --- API (for health checks) ---
 api: yes
 apiAddress: 127.0.0.1:9997

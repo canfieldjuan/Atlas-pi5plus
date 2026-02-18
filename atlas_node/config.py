@@ -132,7 +132,7 @@ BRAIN_API_TIMEOUT = float(os.getenv("BRAIN_API_TIMEOUT", "2.0"))
 DASHBOARD_ENABLED = os.getenv("DASHBOARD_ENABLED", "true").lower() in ("true", "1", "yes")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
-DASHBOARD_ALLOWED_ORIGIN = os.getenv("DASHBOARD_ALLOWED_ORIGIN", "*")
+DASHBOARD_ALLOWED_ORIGIN = os.getenv("DASHBOARD_ALLOWED_ORIGIN", "")
 DASHBOARD_API_TOKEN = os.getenv("DASHBOARD_API_TOKEN", "")
 
 # --- Identity Sync ---

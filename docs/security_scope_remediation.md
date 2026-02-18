@@ -11,7 +11,7 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 
 | ID | Severity | Status | Issue | Evidence | Target Files |
 |----|----------|--------|-------|----------|--------------|
-| SEC-001 | High | In Progress | Dashboard and stream surfaces are exposed without auth and broad bind/CORS | `atlas_node/config.py:134`, `atlas_node/dashboard.py:170`, `/opt/mediamtx/mediamtx.yml:20` | `atlas_node/config.py`, `atlas_node/dashboard.py`, `/opt/mediamtx/mediamtx.yml`, `web/dashboard.html` |
+| SEC-001 | High | Closed | Dashboard and stream surfaces are exposed without auth and broad bind/CORS | `atlas_node/config.py:135`, `atlas_node/dashboard.py:206`, `ops/mediamtx/mediamtx.yml.tmpl:15`, `web/dashboard.html:292` | `atlas_node/config.py`, `atlas_node/dashboard.py`, `ops/mediamtx/mediamtx.yml.tmpl`, `scripts/sync_mediamtx_config.sh`, `web/dashboard.html` |
 | SEC-002 | High | Closed | Person-triggered stream starts but is not explicitly released, causing long-running recording/streaming | `atlas_node/vision.py:575`, `atlas_node/stream_manager.py:57`, `atlas_node/vision.py:549` | `atlas_node/vision.py`, `atlas_node/stream_manager.py` |
 | SEC-003 | High | Closed | Brain sends `escalation_alert` but edge node has no handler | Brain: `atlas_brain/escalation/evaluator.py:227`; Edge handlers: `atlas_node/main.py:194-203` | `atlas_node/main.py` |
 | SEC-004 | Medium | Closed | General assistant scope (time/timer/math/chat) exceeds strict security-node mission | `atlas_node/skills/__init__.py:26-30`, `atlas_node/local_llm.py:19` | `atlas_node/skills/__init__.py`, `atlas_node/config.py`, `atlas_node/speech.py` |
@@ -27,7 +27,7 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 
 ## Current Work Item
 
-- Continue: `SEC-001` (MediaMTX exposure controls + runtime token enablement)
+- None (all tracked remediation items currently closed)
 
 ## Remediation Log
 
@@ -39,3 +39,4 @@ Primary mission for this node is security sensing, eventing, escalation, and ope
 - 2026-02-17: SEC-005 closed. FACE_AUTO_ENROLL default changed from true to false; unknown-face auto-enrollment now requires explicit opt-in via environment config.
 - 2026-02-17: SEC-004 closed. Non-security local skills (time/timer/math) are now opt-in via env flags and disabled by default; local LLM is also disabled by default to keep node behavior security-focused.
 - 2026-02-17: SEC-006 closed. Added repo-managed MediaMTX template and sync script with configurable `MEDIAMTX_RECORD_DELETE_AFTER` (set to `72h` on-node); this establishes retention guardrails under source control.
+- 2026-02-17: SEC-001 closed. MediaMTX WebRTC/HLS read access now requires credentials (template + sync script), dashboard WebRTC client sends Basic auth from token, and dashboard CORS now defaults to deny cross-origin unless explicitly configured.

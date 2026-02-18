@@ -76,16 +76,16 @@ class DashboardServer:
 
         return False
 
-    def _unauthorized_response(self) -> web.Response:
+    def _unauthorized_response(self, request: web.Request) -> web.Response:
         return web.Response(
             status=401,
             text="unauthorized",
-            headers=self._cors_headers(),
+            headers=self._cors_headers(request),
         )
 
     async def _handle_index(self, request: web.Request) -> web.Response:
         if not self._is_authorized(request):
-            return self._unauthorized_response()
+            return self._unauthorized_response(request)
         html_path = WEB_DIR / "dashboard.html"
         if not html_path.exists():
             return web.Response(text="dashboard.html not found", status=404)
@@ -93,7 +93,7 @@ class DashboardServer:
 
     async def _handle_events(self, request: web.Request) -> web.Response:
         if not self._is_authorized(request):
-            return self._unauthorized_response()
+            return self._unauthorized_response(request)
         hours = float(request.query.get("hours", "24"))
         limit = int(request.query.get("limit", "50"))
 
@@ -115,11 +115,11 @@ class DashboardServer:
                 if resp.status == 200:
                     data = await resp.json()
                     events = self._transform_alerts(data.get("alerts", []))
-                    return web.json_response(events, headers=self._cors_headers())
+                    return web.json_response(events, headers=self._cors_headers(request))
         except Exception:
             log.debug("Brain API unreachable for events", exc_info=True)
 
-        return web.json_response([], headers=self._cors_headers())
+        return web.json_response([], headers=self._cors_headers(request))
 
     @staticmethod
     def _transform_alerts(alerts: list[dict]) -> list[dict]:
@@ -142,7 +142,7 @@ class DashboardServer:
 
     async def _handle_status(self, request: web.Request) -> web.Response:
         if not self._is_authorized(request):
-            return self._unauthorized_response()
+            return self._unauthorized_response(request)
         active_tracks = 0
         motion_active = False
         vision_fps = config.VISION_FPS
@@ -173,20 +173,20 @@ class DashboardServer:
             "vision_fps": vision_fps,
             "dashboard_clients": len(self._clients),
         }
-        return web.json_response(status, headers=self._cors_headers())
+        return web.json_response(status, headers=self._cors_headers(request))
 
     async def _handle_faces(self, request: web.Request) -> web.Response:
         if not self._is_authorized(request):
-            return self._unauthorized_response()
+            return self._unauthorized_response(request)
         face_dir = Path(config.FACE_DB_DIR)
         names = []
         if face_dir.exists():
             names = sorted(p.stem for p in face_dir.glob("*.npy"))
-        return web.json_response(names, headers=self._cors_headers())
+        return web.json_response(names, headers=self._cors_headers(request))
 
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         if not self._is_authorized(request):
-            raise web.HTTPUnauthorized(headers=self._cors_headers())
+            raise web.HTTPUnauthorized(headers=self._cors_headers(request))
         ws = web.WebSocketResponse()
         await ws.prepare(request)
         self._clients.add(ws)
@@ -203,16 +203,24 @@ class DashboardServer:
 
     # --- CORS ---
 
-    @staticmethod
-    def _cors_headers() -> dict[str, str]:
-        return {
-            "Access-Control-Allow-Origin": config.DASHBOARD_ALLOWED_ORIGIN,
+    def _cors_headers(self, request: web.Request | None = None) -> dict[str, str]:
+        headers = {
             "Access-Control-Allow-Methods": "GET, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
         }
+        allowed_origin = (config.DASHBOARD_ALLOWED_ORIGIN or "").strip()
+        if not allowed_origin:
+            return headers
+        if allowed_origin == "*":
+            headers["Access-Control-Allow-Origin"] = "*"
+            return headers
+        req_origin = request.headers.get("Origin", "") if request else ""
+        if req_origin == allowed_origin:
+            headers["Access-Control-Allow-Origin"] = allowed_origin
+        return headers
 
     async def _handle_options(self, request: web.Request) -> web.Response:
-        return web.Response(headers=self._cors_headers())
+        return web.Response(headers=self._cors_headers(request))
 
     # --- Lifecycle ---
 
