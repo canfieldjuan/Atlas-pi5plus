@@ -18,3 +18,13 @@ split-DNS routing for Tailscale domains.
 
 **Verified**: DNS resolves `atlas-brain.tailc7bd29.ts.net` → `100.112.150.53`,
 WS connects successfully via Tailscale FQDN.
+
+## 2026-02-17: Source-of-Truth Model Formalized
+
+**Decision**: `Atlas-pi5plus/main` is the canonical source of truth for node runtime.
+
+**Added**:
+- `docs/source_of_truth.md` with canonical paths, invariants, change workflow, and drift checks.
+
+**Operational rule**:
+- Any runtime fix applied on the node must be committed and pushed to `Atlas-pi5plus/main` immediately after validation.
