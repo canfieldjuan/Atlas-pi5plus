@@ -19,6 +19,7 @@ from .event_store import OfflineEventBuffer
 from .identity_sync import IdentitySyncManager
 from .sentence_buffer import SentenceBuffer
 from .startup_display import StartupDisplay
+from .stream_manager import StreamManager
 from .vision import VisionPipeline
 from .speech import SpeechPipeline
 from .ws_client import AtlasWSClient
@@ -96,6 +97,17 @@ async def main():
         display.update("Speech Pipeline", "fail")
         speech = None
 
+    # On-demand RTSP streaming
+    stream_mgr = StreamManager()
+    if vision:
+        vision.set_stream_manager(stream_mgr)
+    if speech and hasattr(speech, '_skill_router') and speech._skill_router:
+        cam_skill = speech._skill_router._registry.get("camera")
+        if cam_skill:
+            cam_skill.set_stream_manager(stream_mgr)
+    log.info("On-demand stream manager ready")
+    display.update("Stream Manager", "ok")
+
     if vision is None and speech is None:
         log.error("Both pipelines failed to init. Exiting.")
         sys.exit(1)
@@ -147,6 +159,19 @@ async def main():
             log.info("Streaming sentence ready: %s", sentence[:60])
             await tts_queue.put(sentence)
 
+    async def _handle_tokens(msg):
+        """Handle batched streaming tokens from Brain."""
+        tokens = msg.get("tokens", [])
+        if not isinstance(tokens, list) or not tokens:
+            return
+        for token in tokens:
+            if not token:
+                continue
+            sentence = sentence_buf.add_token(token)
+            if sentence and tts_engine:
+                log.info("Streaming sentence ready: %s", sentence[:60])
+                await tts_queue.put(sentence)
+
     async def _handle_complete(msg):
         """Handle stream completion -- flush remaining buffer."""
         remaining = sentence_buf.flush()
@@ -167,6 +192,7 @@ async def main():
 
     # Streaming handlers (token-by-token from Brain)
     ws.add_handler("token", _handle_token)
+    ws.add_handler("tokens", _handle_tokens)
     ws.add_handler("complete", _handle_complete)
     # Full response fallback (non-streaming Brain replies)
     ws.add_handler("response", _handle_brain_response)
@@ -238,6 +264,7 @@ async def main():
     except asyncio.CancelledError:
         pass
     finally:
+        stream_mgr.shutdown()
         if dashboard:
             await dashboard.stop()
         if vision:
