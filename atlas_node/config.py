@@ -169,6 +169,11 @@ MATCHA_LENGTH_SCALE = float(os.getenv("MATCHA_LENGTH_SCALE", "1.0"))
 # --- Local Skills ---
 SKILLS_TIMEZONE = os.getenv("SKILLS_TIMEZONE", "America/Chicago")
 SKILLS_MAX_TIMERS = int(os.getenv("SKILLS_MAX_TIMERS", "10"))
+SKILL_TIME_ENABLED = os.getenv("SKILL_TIME_ENABLED", "false").lower() in ("true", "1", "yes")
+SKILL_TIMER_ENABLED = os.getenv("SKILL_TIMER_ENABLED", "false").lower() in ("true", "1", "yes")
+SKILL_MATH_ENABLED = os.getenv("SKILL_MATH_ENABLED", "false").lower() in ("true", "1", "yes")
+SKILL_STATUS_ENABLED = os.getenv("SKILL_STATUS_ENABLED", "true").lower() in ("true", "1", "yes")
+SKILL_CAMERA_ENABLED = os.getenv("SKILL_CAMERA_ENABLED", "true").lower() in ("true", "1", "yes")
 
 # --- Camera Skill ---
 CAMERA_DEFAULT_MONITOR = int(os.getenv("CAMERA_DEFAULT_MONITOR", "1"))
@@ -176,7 +181,7 @@ CAMERA_MONITOR_MAP = os.getenv("CAMERA_MONITOR_MAP", "1=HDMI-2")
 CAMERA_MPV_IPC_DIR = os.getenv("CAMERA_MPV_IPC_DIR", "/tmp/atlas-mpv")
 
 # --- Local LLM (Phi-3 via llama-server) ---
-LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "true").lower() in ("true", "1", "yes")
+LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "false").lower() in ("true", "1", "yes")
 LOCAL_LLM_PORT = int(os.getenv("LOCAL_LLM_PORT", "8081"))
 LOCAL_LLM_MAX_TOKENS = int(os.getenv("LOCAL_LLM_MAX_TOKENS", "200"))
 LOCAL_LLM_TIMEOUT = float(os.getenv("LOCAL_LLM_TIMEOUT", "120"))
