@@ -187,6 +187,33 @@ async def main():
         log.warning("Brain error: %s", msg.get("error", "unknown"))
         sentence_buf.clear()
 
+    async def _handle_escalation_alert(msg):
+        """Handle urgent security escalation pushed by Brain."""
+        priority = msg.get("priority", "unknown")
+        rule = msg.get("rule", "unknown")
+        text = str(msg.get("text", "")).strip()
+        occupancy_context = msg.get("occupancy_context", {})
+
+        log.warning(
+            "Escalation alert (priority=%s rule=%s): %s",
+            priority,
+            rule,
+            text if text else "(empty)",
+        )
+
+        if dashboard:
+            await dashboard.broadcast({
+                "type": "security",
+                "event": "escalation_alert",
+                "priority": priority,
+                "rule": rule,
+                "text": text,
+                "occupancy_context": occupancy_context,
+            })
+
+        if text and tts_engine:
+            await tts_queue.put(text)
+
     async def _noop(_msg):
         pass
 
@@ -197,6 +224,7 @@ async def main():
     # Full response fallback (non-streaming Brain replies)
     ws.add_handler("response", _handle_brain_response)
     ws.add_handler("error", _handle_brain_error)
+    ws.add_handler("escalation_alert", _handle_escalation_alert)
     ws.add_handler("vision_ack", _noop)
     ws.add_handler("health_ack", _noop)
     ws.add_handler("security_ack", _noop)
